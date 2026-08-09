@@ -8,6 +8,8 @@ public readonly record struct StereoCalibration(
 
 public sealed class AdaptiveStereoCalibration
 {
+    public const double TheoreticalMaximumBalance = 1.0;
+
     private const int BalanceWindowSize = 256;
     private const int RecalculationInterval = 8;
     private const double MinimumSilenceThreshold = 0.00001;
@@ -33,7 +35,10 @@ public sealed class AdaptiveStereoCalibration
         double configuredMaximumBalance)
     {
         configuredSilenceThreshold = Math.Clamp(configuredSilenceThreshold, MinimumSilenceThreshold, 1);
-        configuredMaximumBalance = Math.Clamp(configuredMaximumBalance, MinimumMaximumBalance, 1);
+        configuredMaximumBalance = Math.Clamp(
+            configuredMaximumBalance,
+            MinimumMaximumBalance,
+            TheoreticalMaximumBalance);
 
         var total = Math.Max(0, levels.CombinedRms);
         UpdateRecentPeak(total);
@@ -77,6 +82,14 @@ public sealed class AdaptiveStereoCalibration
 
     private void AddBalanceSample(double absoluteBalance, double configuredMaximumBalance)
     {
+        // A wider transient must gain headroom before this same frame is estimated;
+        // the percentile recalculation below then provides the slower release.
+        var transientMaximum = Math.Clamp(
+            absoluteBalance * WidthHeadroom,
+            MinimumMaximumBalance,
+            configuredMaximumBalance);
+        _effectiveMaximumBalance = Math.Max(_effectiveMaximumBalance, transientMaximum);
+
         _balanceWindow[_balanceIndex] = absoluteBalance;
         _balanceIndex = (_balanceIndex + 1) % BalanceWindowSize;
         _balanceCount = Math.Min(_balanceCount + 1, BalanceWindowSize);

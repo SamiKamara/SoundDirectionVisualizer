@@ -141,13 +141,13 @@ public sealed class SettingsForm : Form
         AddWideRow(layout, _automaticAudioCalibration);
         AddRow(layout, "Silence threshold (RMS)", _silenceThreshold);
         AddRow(layout, "Smoothing factor", _smoothing);
-        AddRow(layout, "Hard-pan model balance", _modelBalance);
+        AddRow(layout, "Manual hard-pan balance", _modelBalance);
         AddWideRow(layout, CreateNote(
             "By default, audio is captured directly from the detected Steam game process. This preserves stereo direction when a headset " +
             "or spatial-audio driver exposes only dual mono at its physical output loopback. The selected output device is used as a fallback " +
             "and whenever direct game capture is disabled or no game is detected. Both modes require exactly two channels."));
         AddWideRow(layout, CreateNote(
-            "Automatic calibration scales the silence gate to low-volume devices and learns the stereo width used by the current output. " +
+            "Automatic calibration scales the silence gate, learns the usual stereo width, and adds immediate headroom for wider transient sounds. " +
             "Disable it only when using the manual silence threshold and hard-pan balance values."));
         AddWideRow(layout, CreateNote(
             "Stereo identifies left/right balance, but cannot distinguish front from back. The overlay therefore shows both valid candidates."));

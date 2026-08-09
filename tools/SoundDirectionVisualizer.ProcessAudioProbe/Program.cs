@@ -74,6 +74,13 @@ lock (gate)
 var active = snapshot.Where(frame => !frame.Estimate.IsQuiet).ToArray();
 var balances = active.Select(frame => frame.Estimate.Balance).Order().ToArray();
 var absoluteBalances = balances.Select(Math.Abs).Order().ToArray();
+var combinedLevels = active.Select(frame => frame.Levels.CombinedRms).Order().ToArray();
+var loudFrameThreshold = Percentile(combinedLevels, 0.90);
+var loudFrames = active
+    .Where(frame => frame.Levels.CombinedRms >= loudFrameThreshold)
+    .ToArray();
+var hardSideFrames = active.Count(frame => frame.Estimate.CandidateAzimuths.Count == 1);
+var loudHardSideFrames = loudFrames.Count(frame => frame.Estimate.CandidateAzimuths.Count == 1);
 
 Console.WriteLine($"Frames: {snapshot.Length}, active frames: {active.Length}");
 Console.WriteLine(
@@ -87,6 +94,9 @@ Console.WriteLine(
     $"p90={Percentile(absoluteBalances, 0.90):F6} " +
     $"p99={Percentile(absoluteBalances, 0.99):F6} " +
     $"max={Percentile(absoluteBalances, 1):F6}");
+Console.WriteLine(
+    $"Exact hard-side frames: {hardSideFrames}/{active.Length}; " +
+    $"loudest decile: {loudHardSideFrames}/{loudFrames.Length}");
 
 static double Percentile(double[] sorted, double percentile)
 {

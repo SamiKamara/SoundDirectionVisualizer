@@ -43,7 +43,7 @@ The settings window opens on the first launch. Closing the settings window leave
 
 All bindings can be changed. A binding can be cleared with Delete, except the required overlay toggle, which falls back to its default if invalid.
 
-Direct detected-game audio capture and automatic audio calibration are enabled by default. When a Steam game is detected, its process audio is analyzed before the physical headset endpoint; this preserves L/R information on devices whose output loopback is dual mono after spatial-audio processing. If no game is detected or direct capture is unavailable, the selected Windows output is used automatically. Calibration scales the silence gate down for quiet sources, learns the observed stereo width, and restarts when the capture source changes. Both behaviors can be changed on the Audio tab.
+Direct detected-game audio capture and automatic audio calibration are enabled by default. When a Steam game is detected, its process audio is analyzed before the physical headset endpoint; this preserves L/R information on devices whose output loopback is dual mono after spatial-audio processing. If no game is detected or direct capture is unavailable, the selected Windows output is used automatically. Calibration scales the silence gate down for quiet sources, learns the usual stereo width, and immediately adds headroom when a wider transient such as a gunshot arrives so it is not clipped to an exact side by stale ambience calibration. Calibration restarts when the capture source changes. Both behaviors can be changed on the Audio tab.
 
 The overlay is enabled by default with a white color, 40% opacity, a size of 110% of the target display height, 3 px line thickness, an 8 px direction marker, zero horizontal and vertical offsets, and a five-second trail. Only the current direction markers and fading direction trail are visible by default; every layer can be enabled independently on the Overlay tab.
 
@@ -92,7 +92,7 @@ dotnet run --project .\tools\SoundDirectionVisualizer.ProcessAudioProbe\SoundDir
 dotnet run --project .\tools\SoundDirectionVisualizer.ProcessAudioProbe\SoundDirectionVisualizer.ProcessAudioProbe.csproj --configuration Release -- <game-process-id> 15
 ```
 
-The first command reports the detected Steam window process and the active audio process selected from the same game installation. The second captures that process and reports the active source and observed L/R balance without writing captured audio to disk.
+The first command reports the detected Steam window process and the active audio process selected from the same game installation. The second captures that process and reports the active source, observed L/R balance, and exact hard-side frame counts for all active audio and its loudest decile without writing captured audio to disk.
 
 ## Architecture and project policy
 

@@ -41,9 +41,9 @@ The normalized stereo balance is:
 balance = (R_rms - L_rms) / (R_rms + L_rms)
 ```
 
-The original prototype assumed a model in which an apparent hard side used a 20/80 energy split, producing a balance magnitude of `0.60`. The manual `modelMaximumBalance` defaults to `0.50`.
+The original prototype assumed a model in which an apparent hard side used a 20/80 energy split, producing a balance magnitude of `0.60`. The manual `modelMaximumBalance` defaults to `0.50` and is used only when automatic calibration is disabled.
 
-With automatic calibration enabled, the estimator starts with an effective maximum balance of `0.08` and keeps the latest 256 active absolute balance values. Every eight active frames it estimates the capture source's useful stereo width from the 90th percentile, adds 25% headroom, and gradually moves the effective maximum toward that value. The result is limited to `0.03..modelMaximumBalance`: narrow game/headphone mixes gain useful lateral movement, while tiny channel differences cannot immediately become a hard-side result. Calibration state is reset whenever capture starts or its source changes.
+With automatic calibration enabled, the estimator starts with an effective maximum balance of `0.08` and keeps the latest 256 active absolute balance values. Every eight active frames it estimates the capture source's usual stereo width from the 90th percentile, adds 25% headroom, and gradually moves the effective maximum toward that value. A wider new observation raises the effective maximum immediately, before that same frame is estimated, while the percentile model releases it gradually after the transient. The automatic range is limited to the theoretical balance interval `0.03..1.00`, independently of the disabled manual hard-pan value. This gives narrow ambience useful lateral movement without allowing its learned width to clip a wider gunshot directly to ±90 degrees. Only a true balance magnitude of `1.00`—energy in one channel and none in the other—must still represent an exact hard side. Calibration state is reset whenever capture starts or its source changes.
 
 ```text
 s = clamp(balance / modelMaximumBalance, -1, +1)
@@ -74,7 +74,7 @@ The two rays are therefore a feature: they communicate the information that is p
 - Lower it if relevant quiet sounds disappear.
 - Raise smoothing for a faster but more nervous display.
 - Lower smoothing for a steadier but slower display.
-- Change hard-pan model balance only when known side sounds consistently stop too near the front/back or collapse too early at the side.
+- In manual mode, change hard-pan model balance only when known side sounds consistently stop too near the front/back or collapse too early at the side.
 
 Settings should be tested with a repeatable stereo pan sample before being tuned inside a game mix.
 

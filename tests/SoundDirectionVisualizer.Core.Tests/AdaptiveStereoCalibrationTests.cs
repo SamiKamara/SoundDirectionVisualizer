@@ -77,6 +77,85 @@ public sealed class AdaptiveStereoCalibrationTests
     }
 
     [Fact]
+    public void SuddenWideTransientGetsHeadroomBeforeItsDirectionIsEstimated()
+    {
+        var calibration = new AdaptiveStereoCalibration();
+
+        for (var index = 0; index < 128; index++)
+        {
+            calibration.Update(
+                new StereoLevels(0.48, 0.52),
+                configuredSilenceThreshold: 0.00125,
+                configuredMaximumBalance: AdaptiveStereoCalibration.TheoreticalMaximumBalance);
+        }
+
+        var levels = new StereoLevels(0.10, 0.90);
+        var effective = calibration.Update(
+            levels,
+            configuredSilenceThreshold: 0.00125,
+            configuredMaximumBalance: AdaptiveStereoCalibration.TheoreticalMaximumBalance);
+        var estimate = StereoDirectionEstimator.Estimate(
+            levels,
+            effective.SilenceRmsThreshold,
+            effective.ModelMaximumBalance);
+
+        Assert.Equal(1.0, effective.ModelMaximumBalance, precision: 6);
+        Assert.Equal(2, estimate.CandidateAzimuths.Count);
+        Assert.InRange(estimate.CandidateAzimuths[0], 50, 55);
+    }
+
+    [Fact]
+    public void TransientHeadroomReleasesBackTowardTheUsualStereoWidth()
+    {
+        var calibration = new AdaptiveStereoCalibration();
+        var ambient = new StereoLevels(0.48, 0.52);
+
+        for (var index = 0; index < 128; index++)
+        {
+            calibration.Update(
+                ambient,
+                configuredSilenceThreshold: 0.00125,
+                configuredMaximumBalance: AdaptiveStereoCalibration.TheoreticalMaximumBalance);
+        }
+
+        calibration.Update(
+            new StereoLevels(0.10, 0.90),
+            configuredSilenceThreshold: 0.00125,
+            configuredMaximumBalance: AdaptiveStereoCalibration.TheoreticalMaximumBalance);
+
+        StereoCalibration effective = default;
+        for (var index = 0; index < 256; index++)
+        {
+            effective = calibration.Update(
+                ambient,
+                configuredSilenceThreshold: 0.00125,
+                configuredMaximumBalance: AdaptiveStereoCalibration.TheoreticalMaximumBalance);
+        }
+
+        Assert.InRange(effective.ModelMaximumBalance, 0.05, 0.06);
+    }
+
+    [Fact]
+    public void TrueSingleChannelHardPanCanStillReachTheExactSide()
+    {
+        var calibration = new AdaptiveStereoCalibration();
+        var levels = new StereoLevels(0, 1);
+
+        var effective = calibration.Update(
+            levels,
+            configuredSilenceThreshold: 0.00125,
+            configuredMaximumBalance: AdaptiveStereoCalibration.TheoreticalMaximumBalance);
+        var estimate = StereoDirectionEstimator.Estimate(
+            levels,
+            effective.SilenceRmsThreshold,
+            effective.ModelMaximumBalance);
+
+        Assert.Equal(1.0, effective.ModelMaximumBalance, precision: 6);
+        Assert.Single(estimate.CandidateAzimuths);
+        Assert.Equal(90, estimate.CandidateAzimuths[0], precision: 6);
+    }
+
+    [Fact]
     public void MinimumStereoWidthPreventsTinyImbalanceFromJumpingToTheSide()
     {
         var calibration = new AdaptiveStereoCalibration();

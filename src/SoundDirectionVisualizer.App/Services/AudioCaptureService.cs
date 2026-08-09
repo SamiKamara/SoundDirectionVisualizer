@@ -233,7 +233,10 @@ public sealed class AudioCaptureService : IDisposable
             var levels = StereoRmsAnalyzer.Calculate(buffer, 2, _encoding);
             var smoothed = _smoother.Update(levels, _smoothingFactor);
             var calibration = _automaticCalibration
-                ? _calibration.Update(smoothed, _silenceThreshold, _modelMaximumBalance)
+                ? _calibration.Update(
+                    smoothed,
+                    _silenceThreshold,
+                    AdaptiveStereoCalibration.TheoreticalMaximumBalance)
                 : new StereoCalibration(_silenceThreshold, _modelMaximumBalance);
             var estimate = StereoDirectionEstimator.Estimate(
                 smoothed,
