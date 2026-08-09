@@ -1,4 +1,6 @@
+using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace SoundDirectionVisualizer.App.Native;
 
@@ -15,6 +17,21 @@ internal static class NativeMethods
     internal const uint ModNoRepeat = 0x4000;
     internal const uint WinEventOutOfContext = 0x0000;
     internal const uint WinEventSkipOwnProcess = 0x0002;
+    internal const uint ProcessQueryLimitedInformation = 0x1000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern SafeProcessHandle OpenProcess(
+        uint desiredAccess,
+        [MarshalAs(UnmanagedType.Bool)] bool inheritHandle,
+        uint processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool QueryFullProcessImageName(
+        SafeProcessHandle processHandle,
+        uint flags,
+        StringBuilder executablePath,
+        ref uint pathLength);
 
     [DllImport("user32.dll")]
     internal static extern IntPtr GetForegroundWindow();

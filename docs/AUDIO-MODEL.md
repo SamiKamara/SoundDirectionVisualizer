@@ -8,7 +8,7 @@ This is an amplitude-balance visualizer, not source separation, acoustic localiz
 
 ## Capture source selection
 
-The default source is the audio rendered by the detected Steam game process and its child processes. Windows process-loopback capture is independent of the game's current physical output endpoint and is available on Windows 10 version 2004 (build 19041) and newer. It also excludes unrelated audio such as voice chat, music, and browser playback from the estimate.
+The default source is the audio rendered by the detected Steam game process and its child processes. If a game uses separate launcher, anti-cheat, and audio processes, the application prefers an active audio-session process from the same verified Steam game installation. Windows process-loopback capture is independent of the game's current physical output endpoint and is available on Windows 10 version 2004 (build 19041) and newer. It also excludes unrelated audio such as voice chat, music, and browser playback from the estimate.
 
 If no game is detected, direct activation fails, the Windows version is too old, or the user disables the preference, the selected/default render endpoint is captured through ordinary WASAPI loopback. The fallback preserves the original StereoDirectionVisualizer behavior.
 
@@ -81,7 +81,7 @@ Settings should be tested with a repeatable stereo pan sample before being tuned
 ## Known limitations
 
 - Multiple simultaneous sources are combined into one L/R energy balance.
-- Process capture includes only the detected game process tree; game audio rendered by an unrelated helper process may require endpoint fallback until detection rules are expanded.
+- Process capture includes the selected same-installation audio process tree. Audio routed through a process outside the verified Steam game directory may still require endpoint fallback.
 - Direct game capture requires Windows build 19041 or newer and falls back automatically when unavailable.
 - An endpoint-loopback fallback that exposes true dual mono contains no recoverable left/right direction information.
 - Automatic calibration can amplify a narrow L/R energy difference, but cannot recover direction when a binaural mix encodes it only in timing or spectral cues and has equal channel energy.

@@ -13,4 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SoundDirectionVisualizer.Core\SoundDirectionVisualizer.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SoundDirectionVisualizer.App.Tests" />
+  </ItemGroup>
 </Project>

@@ -26,7 +26,8 @@ Targets `net9.0-windows` with WinForms.
 
 - `AudioCaptureService` prefers NAudio process-loopback capture for the detected game, falls back to selected-endpoint loopback, and translates NAudio formats into core sample encodings.
 - `DirectionOverlayForm` draws the click-through compass, current candidates, and history.
-- `GameWindowMonitor` identifies Steam game windows and their displays.
+- `GameWindowMonitor` identifies Steam game windows and their displays, including processes whose full module metadata is restricted by anti-cheat software.
+- `GameAudioProcessResolver` selects an active audio-session process from the detected Steam game's installation directory when launcher, anti-cheat, and game audio use different processes.
 - `SoundDirectionVisualizerApplicationContext` coordinates audio, overlay, tray UI, hotkeys, settings, display changes, and app lifetime.
 - `SettingsStore` persists normalized JSON settings under `%AppData%`.
 
@@ -62,7 +63,9 @@ flowchart LR
 
 NAudio invokes its data callback on the capture thread, and `AudioCaptureService` raises `FrameAvailable` after analysis on that thread. The application context only replaces a locked reference there. A 33 ms WinForms timer transfers the latest immutable frame to the overlay on the UI thread. Painting and trail mutation therefore remain on the UI thread.
 
-`GameWindowMonitor` includes the detected process ID in its target result. With the default audio preference enabled, a target-process change restarts capture through Windows process loopback at stereo 48 kHz float. If activation is unsupported or fails, `AudioCaptureService` starts the configured endpoint loopback instead and exposes the fallback in status without terminating the overlay. Source transitions reset smoothing and adaptive calibration so state from one game or device is not reused for another.
+`GameWindowMonitor` includes the detected process ID, executable path, and Steam game installation directory in its target result. Executable paths are queried with `PROCESS_QUERY_LIMITED_INFORMATION` before falling back to managed `Process.MainModule`; this permits normal path verification for protected processes such as DayZ's BattlEye-launched game process without bypassing or modifying anti-cheat behavior.
+
+With the default audio preference enabled, `GameAudioProcessResolver` enumerates active render-endpoint sessions and selects the strongest active session whose executable remains inside that same game installation. It falls back to the detected window process if session enumeration is unavailable or produces no same-game candidate. A selected audio-process change restarts capture through Windows process loopback at stereo 48 kHz float. If activation is unsupported or fails, `AudioCaptureService` starts the configured endpoint loopback instead and exposes the fallback in status without terminating the overlay. Source transitions reset smoothing and adaptive calibration so state from one game or device is not reused for another.
 
 The application pins `NAudio.Wasapi` `3.0.0-preview.20` because its recorder API provides the Windows process-loopback activation used here. The exact version is intentional; migration to a stable NAudio 3 release should be tested as an explicit dependency change.
 
@@ -90,6 +93,8 @@ Automatic targeting follows this priority:
 3. still-visible cached game window;
 4. a throttled full process scan;
 5. unchanged current display when nothing is detected.
+
+Steam containment uses path-relative directory checks rather than string-prefix checks, so a similarly named sibling directory cannot be mistaken for a game under `steamapps\common`. The first directory below `common` is retained as the game-install boundary for same-game audio-session selection.
 
 Foreground changes trigger a refresh through a WinEvent hook. A two-second timer provides recovery from missed events, process startup races, and display changes. Manual cycling disables automatic display targeting intentionally, while game detection can remain active solely for preferred process-audio capture.
 

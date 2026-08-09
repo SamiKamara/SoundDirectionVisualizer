@@ -3,6 +3,31 @@ using SoundDirectionVisualizer.App;
 using SoundDirectionVisualizer.App.Services;
 using SoundDirectionVisualizer.Core.Direction;
 
+if (args.Length > 0 && args[0].Equals("--resolve-game-audio", StringComparison.OrdinalIgnoreCase))
+{
+    var detected = new GameWindowMonitor(new SteamLibraryService()).Detect()
+        ?? throw new InvalidOperationException("No running Steam game window was detected.");
+    if (args.Length > 1 && int.TryParse(args[1], out var requestedDetectedProcessId))
+    {
+        using var requestedDetectedProcess = Process.GetProcessById(requestedDetectedProcessId);
+        detected = detected with
+        {
+            ProcessId = requestedDetectedProcess.Id,
+            ProcessName = requestedDetectedProcess.ProcessName,
+            ExecutablePath = ProcessPathResolver.TryGetExecutablePath(requestedDetectedProcess)
+                ?? detected.ExecutablePath
+        };
+    }
+
+    var selected = new GameAudioProcessResolver().Resolve(detected);
+
+    Console.WriteLine($"Detected window process: {detected.ProcessName} ({detected.ProcessId})");
+    Console.WriteLine($"Detected executable: {detected.ExecutablePath}");
+    Console.WriteLine($"Game install directory: {detected.GameInstallDirectory}");
+    Console.WriteLine($"Selected audio process: {selected.ProcessName} ({selected.ProcessId})");
+    return;
+}
+
 using var targetProcess = args.Length > 0 && int.TryParse(args[0], out var requestedProcessId)
     ? Process.GetProcessById(requestedProcessId)
     : Process.GetProcessesByName("DayZ_x64").SingleOrDefault()

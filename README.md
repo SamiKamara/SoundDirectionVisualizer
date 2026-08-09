@@ -63,7 +63,7 @@ The estimator and its assumptions are documented in [docs/AUDIO-MODEL.md](docs/A
 With automatic targeting enabled, the application:
 
 1. checks the foreground window;
-2. resolves its process and executable path;
+2. resolves its process and executable path with a limited-information Windows query that remains available for many anti-cheat-protected game processes;
 3. verifies that the executable is under a discovered Steam library's `steamapps\common` directory;
 4. targets the display containing that window;
 5. retains a recently detected game while its window remains visible and not minimized;
@@ -71,7 +71,7 @@ With automatic targeting enabled, the application:
 
 If no game is detected, the current/manual display remains selected. Turning automatic targeting off makes the chosen display explicit and persistent.
 
-Game detection is also used by the default audio-capture mode. Audio can continue to follow a detected Steam game while display targeting is manual. The tray menu's disabled `Audio:` row shows whether the active source is `Game: <process>` or a Windows output device.
+Game detection is also used by the default audio-capture mode. Games may split launcher, anti-cheat, rendering, and audio work across several processes, so the application checks active Windows audio sessions and prefers the audio-producing process from the same Steam game installation. Audio can continue to follow a detected Steam game while display targeting is manual. The tray menu's disabled `Audio:` row shows whether the active source is `Game: <process>` or a Windows output device.
 
 The overlay works best with borderless-windowed games. Exclusive fullscreen, protected presentation paths, and some anti-cheat environments may prevent third-party topmost windows from appearing.
 
@@ -88,10 +88,11 @@ Publishing creates a self-contained single-file executable under `artifacts\publ
 For a live verification of the same production capture service used by the overlay:
 
 ```powershell
+dotnet run --project .\tools\SoundDirectionVisualizer.ProcessAudioProbe\SoundDirectionVisualizer.ProcessAudioProbe.csproj --configuration Release -- --resolve-game-audio
 dotnet run --project .\tools\SoundDirectionVisualizer.ProcessAudioProbe\SoundDirectionVisualizer.ProcessAudioProbe.csproj --configuration Release -- <game-process-id> 15
 ```
 
-The probe reports the active source and observed L/R balance without writing captured audio to disk.
+The first command reports the detected Steam window process and the active audio process selected from the same game installation. The second captures that process and reports the active source and observed L/R balance without writing captured audio to disk.
 
 ## Architecture and project policy
 

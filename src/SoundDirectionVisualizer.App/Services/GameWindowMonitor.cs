@@ -7,7 +7,9 @@ public sealed record DetectedGameTarget(
     int ProcessId,
     string ProcessName,
     string WindowTitle,
-    Screen Screen);
+    Screen Screen,
+    string ExecutablePath,
+    string GameInstallDirectory);
 
 public sealed class GameWindowMonitor
 {
@@ -137,14 +139,15 @@ public sealed class GameWindowMonitor
                 return null;
             }
 
-            var executablePath = process.MainModule?.FileName;
+            var executablePath = ProcessPathResolver.TryGetExecutablePath(process);
             if (string.IsNullOrWhiteSpace(executablePath))
             {
                 return null;
             }
 
             var normalized = Path.GetFullPath(executablePath);
-            if (!gameRoots.Any(root => normalized.StartsWith(root, StringComparison.OrdinalIgnoreCase)))
+            var gameInstallDirectory = SteamGamePath.TryResolveInstallDirectory(normalized, gameRoots);
+            if (gameInstallDirectory is null)
             {
                 return null;
             }
@@ -153,7 +156,9 @@ public sealed class GameWindowMonitor
                 process.Id,
                 process.ProcessName,
                 process.MainWindowTitle,
-                Screen.FromHandle(windowHandle));
+                Screen.FromHandle(windowHandle),
+                normalized,
+                gameInstallDirectory);
         }
         catch
         {

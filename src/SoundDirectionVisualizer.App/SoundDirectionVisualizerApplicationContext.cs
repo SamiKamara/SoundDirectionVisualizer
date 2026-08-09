@@ -30,10 +30,12 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     private readonly System.Windows.Forms.Timer _targetRefreshTimer = new() { Interval = 2000 };
     private readonly System.Windows.Forms.Timer? _startupSettingsTimer;
     private readonly GameWindowMonitor _gameWindowMonitor;
+    private readonly GameAudioProcessResolver _gameAudioProcessResolver = new();
     private readonly NativeMethods.WinEventProc _foregroundWindowEventProc;
     private AppSettings _settings;
     private Screen _currentScreen;
     private DetectedGameTarget? _detectedGame;
+    private GameAudioProcessTarget? _detectedGameAudio;
     private DirectionFrame? _latestFrame;
     private SettingsForm? _activeSettingsForm;
     private bool _autoTargetRefreshInProgress;
@@ -181,7 +183,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     {
         var generation = ++_audioCaptureGeneration;
         var settings = _settings.Clone();
-        var preferredGame = settings.PreferDetectedGameAudio ? _detectedGame : null;
+        var preferredGame = settings.PreferDetectedGameAudio ? _detectedGameAudio : null;
 
         lock (_frameGate)
         {
@@ -405,6 +407,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         {
             var previousProcessId = _detectedGame?.ProcessId;
             _detectedGame = null;
+            _detectedGameAudio = null;
             if (previousProcessId.HasValue || _audioCapture.IsProcessCapture)
             {
                 StartAudioCapture();
@@ -445,15 +448,20 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                 _pendingAutoTargetRefresh = false;
                 _pendingAutoTargetForceRefresh = false;
 
-                var detected = await Task.Run(() =>
+                var preferDetectedGameAudio = _settings.PreferDetectedGameAudio;
+                var detection = await Task.Run(() =>
                 {
                     try
                     {
-                        return _gameWindowMonitor.Detect();
+                        var game = _gameWindowMonitor.Detect();
+                        var audio = preferDetectedGameAudio && game is not null
+                            ? _gameAudioProcessResolver.Resolve(game)
+                            : null;
+                        return (Game: game, Audio: audio);
                     }
                     catch
                     {
-                        return null;
+                        return (Game: (DetectedGameTarget?)null, Audio: (GameAudioProcessTarget?)null);
                     }
                 });
 
@@ -464,11 +472,12 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                 }
 
                 var previousPreferredProcessId = _settings.PreferDetectedGameAudio
-                    ? _detectedGame?.ProcessId
+                    ? _detectedGameAudio?.ProcessId
                     : null;
-                _detectedGame = detected;
+                _detectedGame = detection.Game;
+                _detectedGameAudio = detection.Audio;
                 var nextPreferredProcessId = _settings.PreferDetectedGameAudio
-                    ? detected?.ProcessId
+                    ? detection.Audio?.ProcessId
                     : null;
                 if (previousPreferredProcessId != nextPreferredProcessId)
                 {
@@ -476,7 +485,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                 }
 
                 var resolvedScreen = _settings.AutoDetectSteamGameMonitor
-                    ? detected?.Screen ?? _currentScreen
+                    ? detection.Game?.Screen ?? _currentScreen
                     : DisplayInfoFormatter.ResolveScreen(_settings.SelectedMonitorDeviceName);
                 ApplyResolvedScreen(resolvedScreen, force);
             }
