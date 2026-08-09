@@ -1,0 +1,49 @@
+using SoundDirectionVisualizer.App;
+
+namespace SoundDirectionVisualizer.App.Tests;
+
+public sealed class AppSettingsTests
+{
+    [Fact]
+    public void NewSettingsUseRequestedAudioAndOverlayDefaults()
+    {
+        var settings = new AppSettings();
+
+        settings.Normalize();
+
+        Assert.True(settings.OverlayEnabled);
+        Assert.Equal(0.50, settings.ModelMaximumBalance, precision: 6);
+        Assert.Equal("#FFFFFF", settings.OverlayColorHex);
+        Assert.Equal(40, settings.OverlayOpacityPercent);
+        Assert.Equal(110, settings.OverlayHeightPercent);
+        Assert.Equal(3, settings.RingThickness);
+        Assert.Equal(8, settings.MarkerSize);
+        Assert.Equal(0, settings.HorizontalOffset);
+        Assert.Equal(0, settings.VerticalOffset);
+        Assert.False(settings.ShowCompassRing);
+        Assert.False(settings.ShowCardinalTicks);
+        Assert.False(settings.ShowCurrentDirectionRays);
+        Assert.True(settings.ShowCurrentDirectionMarkers);
+        Assert.False(settings.ShowListenerDot);
+        Assert.True(settings.ShowDirectionTrail);
+        Assert.Equal(5, settings.TrailDurationSeconds);
+        Assert.False(settings.ShowCompassLabels);
+    }
+
+    [Fact]
+    public void LegacySmallOverlayOffsetIsCenteredWhenDisplayRelativeSizingIsIntroduced()
+    {
+        var settings = new AppSettings
+        {
+            OverlayHeightPercent = 0,
+            OverlayOpacityPercent = -1,
+            VerticalOffset = 220
+        };
+
+        settings.Normalize();
+
+        Assert.Equal(110, settings.OverlayHeightPercent);
+        Assert.Equal(40, settings.OverlayOpacityPercent);
+        Assert.Equal(0, settings.VerticalOffset);
+    }
+}

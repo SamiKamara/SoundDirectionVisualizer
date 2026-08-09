@@ -1,0 +1,440 @@
+namespace SoundDirectionVisualizer.App.UI;
+
+public sealed class SettingsForm : Form
+{
+    private readonly CheckBox _overlayEnabled = new() { Text = "Enable overlay", AutoSize = true };
+    private readonly ComboBox _audioDevice = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly NumericUpDown _silenceThreshold = CreateDecimalNumeric(0.00001m, 0.1m, 5, 0.00010m);
+    private readonly NumericUpDown _smoothing = CreateDecimalNumeric(0.01m, 1m, 2, 0.01m);
+    private readonly NumericUpDown _modelBalance = CreateDecimalNumeric(0.05m, 1m, 2, 0.05m);
+    private readonly CheckBox _autoDetect = new() { Text = "Automatically target a running Steam game's display", AutoSize = true };
+    private readonly ComboBox _monitor = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly NumericUpDown _scale = CreateIntegerNumeric(10, 200, 5);
+    private readonly NumericUpDown _thickness = CreateIntegerNumeric(1, 12);
+    private readonly NumericUpDown _markerSize = CreateIntegerNumeric(4, 32);
+    private readonly TrackBar _opacitySlider = new()
+    {
+        Minimum = 0,
+        Maximum = 100,
+        TickFrequency = 10,
+        SmallChange = 1,
+        LargeChange = 10,
+        AutoSize = false,
+        Width = 230,
+        Height = 34
+    };
+    private readonly Label _opacityValueLabel = new() { Text = "40%", AutoSize = true };
+    private readonly NumericUpDown _horizontalOffset = CreateIntegerNumeric(-4000, 4000);
+    private readonly NumericUpDown _verticalOffset = CreateIntegerNumeric(-4000, 4000);
+    private readonly NumericUpDown _trailDuration = CreateDecimalNumeric(0.5m, 15m, 1, 0.5m);
+    private readonly CheckBox _showRing = new() { Text = "Show compass ring", AutoSize = true };
+    private readonly CheckBox _showTicks = new() { Text = "Show cardinal tick marks", AutoSize = true };
+    private readonly CheckBox _showCurrentRays = new() { Text = "Show current direction rays", AutoSize = true };
+    private readonly CheckBox _showCurrentMarkers = new() { Text = "Show current direction markers", AutoSize = true };
+    private readonly CheckBox _showListenerDot = new() { Text = "Show center listener dot", AutoSize = true };
+    private readonly CheckBox _showTrail = new() { Text = "Show fading direction trail", AutoSize = true };
+    private readonly CheckBox _showLabels = new() { Text = "Show F / B / L / R labels", AutoSize = true };
+    private readonly Button _colorButton = new() { Text = "Choose...", AutoSize = true };
+    private readonly Panel _colorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
+    private readonly HotkeyTextBox _toggleHotkey = new() { Dock = DockStyle.Fill };
+    private readonly HotkeyTextBox _cycleHotkey = new() { Dock = DockStyle.Fill };
+    private readonly HotkeyTextBox _openSettingsHotkey = new() { Dock = DockStyle.Fill };
+    private string _selectedColorHex = "#FFFFFF";
+    private bool _isLoading = true;
+
+    public SettingsForm(AppSettings settings)
+    {
+        Text = "Sound Direction Visualizer Settings";
+        StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(660, 600);
+        ClientSize = new Size(700, 680);
+        ShowInTaskbar = true;
+        MaximizeBox = false;
+        AutoScaleMode = AutoScaleMode.Dpi;
+
+        ResultSettings = settings.Clone();
+        BuildLayout();
+        LoadSettings(settings);
+        _isLoading = false;
+    }
+
+    public AppSettings ResultSettings { get; private set; }
+
+    public event Action<AppSettings>? OverlayPreviewChanged;
+
+    private void BuildLayout()
+    {
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(10)
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        tabs.TabPages.Add(BuildAudioTab());
+        tabs.TabPages.Add(BuildOverlayTab());
+        tabs.TabPages.Add(BuildTargetingTab());
+        tabs.TabPages.Add(BuildHotkeysTab());
+        root.Controls.Add(tabs, 0, 0);
+        root.Controls.Add(BuildButtons(), 0, 1);
+        Controls.Add(root);
+
+        _autoDetect.CheckedChanged += (_, _) => _monitor.Enabled = !_autoDetect.Checked;
+        _showTrail.CheckedChanged += (_, _) => _trailDuration.Enabled = _showTrail.Checked;
+        _colorButton.Click += (_, _) => ChooseColor();
+
+        foreach (var numeric in new[]
+                 {
+                     _scale,
+                     _thickness,
+                     _markerSize,
+                     _horizontalOffset,
+                     _verticalOffset,
+                     _trailDuration
+                 })
+        {
+            numeric.ValueChanged += (_, _) => NotifyOverlayPreviewChanged();
+        }
+
+        _overlayEnabled.CheckedChanged += (_, _) => NotifyOverlayPreviewChanged();
+        foreach (var toggle in new[]
+                 {
+                     _showRing,
+                     _showTicks,
+                     _showCurrentRays,
+                     _showCurrentMarkers,
+                     _showListenerDot,
+                     _showTrail,
+                     _showLabels
+                 })
+        {
+            toggle.CheckedChanged += (_, _) => NotifyOverlayPreviewChanged();
+        }
+        _opacitySlider.ValueChanged += (_, _) =>
+        {
+            _opacityValueLabel.Text = $"{_opacitySlider.Value}%";
+            NotifyOverlayPreviewChanged();
+        };
+    }
+
+    private TabPage BuildAudioTab()
+    {
+        var page = CreateTab("Audio");
+        var layout = CreateTwoColumnTable();
+        AddRow(layout, "Output device", _audioDevice);
+        AddRow(layout, "Silence threshold (RMS)", _silenceThreshold);
+        AddRow(layout, "Smoothing factor", _smoothing);
+        AddRow(layout, "Hard-pan model balance", _modelBalance);
+        AddWideRow(layout, CreateNote(
+            "Version 1 captures the selected Windows output through WASAPI loopback and requires exactly two channels. " +
+            "The default output follows Windows when the app is restarted or settings are applied."));
+        AddWideRow(layout, CreateNote(
+            "Stereo identifies left/right balance, but cannot distinguish front from back. The overlay therefore shows both valid candidates."));
+        page.Controls.Add(layout);
+        return page;
+    }
+
+    private TabPage BuildOverlayTab()
+    {
+        var page = CreateTab("Overlay");
+        var layout = CreateTwoColumnTable();
+        AddWideRow(layout, _overlayEnabled);
+
+        var colorPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        colorPanel.Controls.Add(_colorPreview);
+        colorPanel.Controls.Add(_colorButton);
+        AddRow(layout, "Color", colorPanel);
+
+        var opacityPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        opacityPanel.Controls.Add(_opacitySlider);
+        opacityPanel.Controls.Add(_opacityValueLabel);
+        AddRow(layout, "Opacity", opacityPanel);
+        AddRow(layout, "Size (% of display height)", _scale);
+        AddRow(layout, "Line thickness (px)", _thickness);
+        AddRow(layout, "Direction marker (px)", _markerSize);
+        AddRow(layout, "Horizontal offset (px)", _horizontalOffset);
+        AddRow(layout, "Vertical offset (px)", _verticalOffset);
+        AddWideRow(layout, CreateNote(
+            "The default size is 110% of the target display height. " +
+            "Size changes the ring, lines, markers, and labels together. " +
+            "Offsets are relative to the target display center; positive Y moves the visualizer down. Changes are previewed live."));
+        AddWideRow(layout, new Label
+        {
+            Text = "Visible elements",
+            AutoSize = true,
+            Font = new Font(Font, FontStyle.Bold)
+        });
+        AddWideRow(layout, _showRing);
+        AddWideRow(layout, _showTicks);
+        AddWideRow(layout, _showCurrentRays);
+        AddWideRow(layout, _showCurrentMarkers);
+        AddWideRow(layout, _showListenerDot);
+        AddWideRow(layout, _showTrail);
+        AddRow(layout, "Trail duration (seconds)", _trailDuration);
+        AddWideRow(layout, _showLabels);
+        page.Controls.Add(layout);
+        return page;
+    }
+
+    private TabPage BuildTargetingTab()
+    {
+        var page = CreateTab("Target display");
+        var layout = CreateTwoColumnTable();
+        AddWideRow(layout, _autoDetect);
+        AddRow(layout, "Manual display", _monitor);
+        AddWideRow(layout, CreateNote(
+            "Auto targeting first checks the foreground window, verifies that its executable is inside a Steam library, " +
+            "and uses that window's display. A recently detected valid game window is retained; otherwise the selected display remains in use."));
+        AddWideRow(layout, CreateNote(
+            "The overlay is intended for borderless-windowed games. Exclusive fullscreen and some anti-cheat/protected overlays can block it."));
+        page.Controls.Add(layout);
+        return page;
+    }
+
+    private TabPage BuildHotkeysTab()
+    {
+        var page = CreateTab("Hotkeys");
+        var layout = CreateTwoColumnTable();
+        AddRow(layout, "Toggle overlay", _toggleHotkey);
+        AddRow(layout, "Cycle displays", _cycleHotkey);
+        AddRow(layout, "Open settings", _openSettingsHotkey);
+        AddWideRow(layout, CreateNote("Focus a field and press a key combination. Press Delete to clear an optional binding."));
+        page.Controls.Add(layout);
+        return page;
+    }
+
+    private FlowLayoutPanel BuildButtons()
+    {
+        var panel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            Padding = new Padding(0, 10, 0, 0)
+        };
+        var save = new Button { Text = "Save", DialogResult = DialogResult.None, AutoSize = true };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+        save.Click += (_, _) => SaveAndClose();
+        panel.Controls.Add(save);
+        panel.Controls.Add(cancel);
+        AcceptButton = save;
+        CancelButton = cancel;
+        return panel;
+    }
+
+    private void LoadSettings(AppSettings source)
+    {
+        var settings = source.Clone();
+        settings.Normalize();
+
+        IReadOnlyList<Services.AudioEndpointInfo> endpoints;
+        try
+        {
+            endpoints = Services.AudioEndpointService.GetRenderEndpoints();
+        }
+        catch
+        {
+            endpoints = new[] { new Services.AudioEndpointInfo(null, "Default Windows output device") };
+        }
+
+        _audioDevice.Items.AddRange(endpoints.Cast<object>().ToArray());
+        _audioDevice.SelectedItem = endpoints.FirstOrDefault(item => item.Id == settings.AudioDeviceId) ?? endpoints[0];
+
+        foreach (var screen in Screen.AllScreens)
+        {
+            _monitor.Items.Add(new DisplayOption(screen.DeviceName, DisplayInfoFormatter.ToDisplayLabel(screen)));
+        }
+
+        _monitor.SelectedItem = _monitor.Items.Cast<DisplayOption>().FirstOrDefault(item =>
+            string.Equals(item.DeviceName, settings.SelectedMonitorDeviceName, StringComparison.OrdinalIgnoreCase))
+            ?? _monitor.Items.Cast<DisplayOption>().FirstOrDefault();
+
+        _overlayEnabled.Checked = settings.OverlayEnabled;
+        _silenceThreshold.Value = (decimal)settings.SilenceRmsThreshold;
+        _smoothing.Value = (decimal)settings.SmoothingFactor;
+        _modelBalance.Value = (decimal)settings.ModelMaximumBalance;
+        _autoDetect.Checked = settings.AutoDetectSteamGameMonitor;
+        _monitor.Enabled = !_autoDetect.Checked;
+        _selectedColorHex = settings.OverlayColorHex;
+        _colorPreview.BackColor = settings.GetOverlayColor();
+        _opacitySlider.Value = settings.OverlayOpacityPercent;
+        _opacityValueLabel.Text = $"{settings.OverlayOpacityPercent}%";
+        _scale.Value = settings.OverlayHeightPercent;
+        _thickness.Value = settings.RingThickness;
+        _markerSize.Value = settings.MarkerSize;
+        _horizontalOffset.Value = settings.HorizontalOffset;
+        _verticalOffset.Value = settings.VerticalOffset;
+        _showRing.Checked = settings.ShowCompassRing;
+        _showTicks.Checked = settings.ShowCardinalTicks;
+        _showCurrentRays.Checked = settings.ShowCurrentDirectionRays;
+        _showCurrentMarkers.Checked = settings.ShowCurrentDirectionMarkers;
+        _showListenerDot.Checked = settings.ShowListenerDot;
+        _showTrail.Checked = settings.ShowDirectionTrail;
+        _trailDuration.Value = (decimal)settings.TrailDurationSeconds;
+        _trailDuration.Enabled = _showTrail.Checked;
+        _showLabels.Checked = settings.ShowCompassLabels;
+        _toggleHotkey.Hotkey = settings.ToggleHotkey;
+        _cycleHotkey.Hotkey = settings.CycleMonitorHotkey;
+        _openSettingsHotkey.Hotkey = settings.OpenSettingsHotkey;
+    }
+
+    private void ChooseColor()
+    {
+        using var dialog = new ColorDialog
+        {
+            Color = ColorTranslator.FromHtml(_selectedColorHex),
+            FullOpen = true
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        _selectedColorHex = $"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}";
+        _colorPreview.BackColor = dialog.Color;
+        NotifyOverlayPreviewChanged();
+    }
+
+    private void SaveAndClose()
+    {
+        ResultSettings = ReadSettingsFromControls();
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    private AppSettings ReadSettingsFromControls()
+    {
+        var selectedEndpoint = _audioDevice.SelectedItem as Services.AudioEndpointInfo;
+        var selectedDisplay = _monitor.SelectedItem as DisplayOption;
+
+        var settings = new AppSettings
+        {
+            OverlayEnabled = _overlayEnabled.Checked,
+            AudioDeviceId = selectedEndpoint?.Id,
+            SilenceRmsThreshold = (double)_silenceThreshold.Value,
+            SmoothingFactor = (double)_smoothing.Value,
+            ModelMaximumBalance = (double)_modelBalance.Value,
+            AutoDetectSteamGameMonitor = _autoDetect.Checked,
+            SelectedMonitorDeviceName = selectedDisplay?.DeviceName,
+            OverlayColorHex = _selectedColorHex,
+            OverlayOpacityPercent = _opacitySlider.Value,
+            OverlayHeightPercent = (int)_scale.Value,
+            RingThickness = (int)_thickness.Value,
+            MarkerSize = (int)_markerSize.Value,
+            HorizontalOffset = (int)_horizontalOffset.Value,
+            VerticalOffset = (int)_verticalOffset.Value,
+            ShowCompassRing = _showRing.Checked,
+            ShowCardinalTicks = _showTicks.Checked,
+            ShowCurrentDirectionRays = _showCurrentRays.Checked,
+            ShowCurrentDirectionMarkers = _showCurrentMarkers.Checked,
+            ShowListenerDot = _showListenerDot.Checked,
+            ShowDirectionTrail = _showTrail.Checked,
+            TrailDurationSeconds = (double)_trailDuration.Value,
+            ShowCompassLabels = _showLabels.Checked,
+            ToggleHotkey = _toggleHotkey.Hotkey,
+            CycleMonitorHotkey = _cycleHotkey.Hotkey,
+            OpenSettingsHotkey = _openSettingsHotkey.Hotkey
+        };
+        settings.Normalize();
+        return settings;
+    }
+
+    private void NotifyOverlayPreviewChanged()
+    {
+        if (_isLoading)
+        {
+            return;
+        }
+
+        OverlayPreviewChanged?.Invoke(ReadSettingsFromControls());
+    }
+
+    private static TabPage CreateTab(string text) => new(text)
+    {
+        Padding = new Padding(14),
+        AutoScroll = true
+    };
+
+    private static TableLayoutPanel CreateTwoColumnTable()
+    {
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            Padding = new Padding(4)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+        return layout;
+    }
+
+    private static void AddRow(TableLayoutPanel layout, string labelText, Control control)
+    {
+        var row = layout.RowCount++;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var label = new Label
+        {
+            Text = labelText,
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(3, 9, 12, 9)
+        };
+        control.Margin = new Padding(3, 5, 3, 5);
+        layout.Controls.Add(label, 0, row);
+        layout.Controls.Add(control, 1, row);
+    }
+
+    private static void AddWideRow(TableLayoutPanel layout, Control control)
+    {
+        var row = layout.RowCount++;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        control.Margin = new Padding(3, 8, 3, 8);
+        layout.Controls.Add(control, 0, row);
+        layout.SetColumnSpan(control, 2);
+    }
+
+    private static Label CreateNote(string text) => new()
+    {
+        Text = text,
+        AutoSize = true,
+        MaximumSize = new Size(590, 0),
+        ForeColor = SystemColors.GrayText
+    };
+
+    private static NumericUpDown CreateIntegerNumeric(
+        int minimum,
+        int maximum,
+        int increment = 1) => new()
+        {
+            Minimum = minimum,
+            Maximum = maximum,
+            Increment = increment,
+            Dock = DockStyle.Left,
+            Width = 120
+        };
+
+    private static NumericUpDown CreateDecimalNumeric(
+        decimal minimum,
+        decimal maximum,
+        int decimalPlaces,
+        decimal increment) => new()
+        {
+            Minimum = minimum,
+            Maximum = maximum,
+            DecimalPlaces = decimalPlaces,
+            Increment = increment,
+            Dock = DockStyle.Left,
+            Width = 120
+        };
+
+    private sealed record DisplayOption(string DeviceName, string Label)
+    {
+        public override string ToString() => Label;
+    }
+}

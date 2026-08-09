@@ -1,0 +1,38 @@
+## .NET build output
+bin/
+obj/
+artifacts/
+TestResults/
+
+## IDE and user-local files
+.vs/
+.vscode/
+.idea/
+_ReSharper*/
+*.user
+*.suo
+*.DotSettings.user
+
+## Logs, coverage, and temporary files
+*.log
+*.tmp
+*.bak
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+
+## Local packages and secrets
+packages/
+*.nupkg
+*.snupkg
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+
+## OS files
+Thumbs.db
+.DS_Store

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>SoundDirectionVisualizer</AssemblyName>
+    <Product>Sound Direction Visualizer</Product>
+    <ApplicationIcon>Assets\SoundDirectionVisualizerIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SoundDirectionVisualizer.Core\SoundDirectionVisualizer.Core.csproj" />
+  </ItemGroup>
+</Project>
