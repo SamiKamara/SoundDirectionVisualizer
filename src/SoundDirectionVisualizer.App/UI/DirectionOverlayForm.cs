@@ -1,4 +1,5 @@
 using SoundDirectionVisualizer.App.Native;
+using SoundDirectionVisualizer.Core.Audio;
 using SoundDirectionVisualizer.Core.Direction;
 using SoundDirectionVisualizer.Core.Visualization;
 using System.Drawing.Drawing2D;
@@ -11,6 +12,7 @@ public sealed class DirectionOverlayForm : Form
     private readonly DirectionTrail _trail = new();
     private AppSettings _settings = new();
     private Color _overlayBaseColor = Color.FromArgb(70, 230, 255);
+    private Color _loudMarkerOutlineBaseColor = Color.Black;
     private Screen _targetScreen = Screen.PrimaryScreen ?? Screen.AllScreens.First();
     private DirectionFrame? _currentFrame;
     private DateTimeOffset _lastTrailTimestamp = DateTimeOffset.MinValue;
@@ -56,6 +58,7 @@ public sealed class DirectionOverlayForm : Form
         _settings = settings.Clone();
         _settings.Normalize();
         _overlayBaseColor = _settings.GetOverlayColor();
+        _loudMarkerOutlineBaseColor = _settings.GetLoudMarkerOutlineColor();
         Opacity = _settings.OverlayOpacityPercent / 100d;
         _trail.Clear();
         _lastTrailTimestamp = DateTimeOffset.MinValue;
@@ -78,7 +81,7 @@ public sealed class DirectionOverlayForm : Form
             && frame.Timestamp != _lastTrailTimestamp
             && _settings.ShowDirectionTrail)
         {
-            _trail.Add(frame.Estimate, frame.Timestamp);
+            _trail.Add(frame.Estimate, frame.Timestamp, frame.Loudness);
             _lastTrailTimestamp = frame.Timestamp;
         }
 
@@ -140,7 +143,12 @@ public sealed class DirectionOverlayForm : Form
 
             if (_settings.ShowCurrentDirectionMarkers)
             {
-                DrawCurrentDirectionMarkers(graphics, center, metrics, current.Estimate.CandidateAzimuths);
+                DrawCurrentDirectionMarkers(
+                    graphics,
+                    center,
+                    metrics,
+                    current.Estimate.CandidateAzimuths,
+                    current.Loudness);
             }
         }
 
@@ -191,9 +199,8 @@ public sealed class DirectionOverlayForm : Form
             }
 
             var position = ToPoint(center, metrics.Radius, point.Azimuth);
-            var size = Math.Max(1f, metrics.MarkerSize * (float)(0.20 + 0.30 * freshness));
-            using var brush = new SolidBrush(FadedOverlayColor(0.30 + 0.70 * freshness));
-            graphics.FillEllipse(brush, position.X - size / 2, position.Y - size / 2, size, size);
+            var visual = GetMarkerVisual(metrics, freshness, point.Loudness);
+            DrawDirectionMarker(graphics, position, metrics, visual);
         }
     }
 
@@ -220,21 +227,61 @@ public sealed class DirectionOverlayForm : Form
         Graphics graphics,
         PointF center,
         OverlayMetrics metrics,
-        IReadOnlyList<double> candidateAzimuths)
+        IReadOnlyList<double> candidateAzimuths,
+        SoundLoudness loudness)
     {
-        using var markerBrush = new SolidBrush(OverlayColor());
+        var visual = GetMarkerVisual(metrics, freshness: 1, loudness);
 
         foreach (var azimuth in candidateAzimuths)
         {
             var position = ToPoint(center, metrics.Radius, azimuth);
-            var markerSize = metrics.MarkerSize;
-            graphics.FillEllipse(
-                markerBrush,
-                position.X - markerSize / 2f,
-                position.Y - markerSize / 2f,
-                markerSize,
-                markerSize);
+            DrawDirectionMarker(graphics, position, metrics, visual);
         }
+    }
+
+    private DirectionMarkerVisual GetMarkerVisual(
+        OverlayMetrics metrics,
+        double freshness,
+        SoundLoudness loudness) => DirectionMarkerVisualCalculator.Calculate(
+            metrics.MarkerSize,
+            freshness,
+            _settings.LoudSoundEmphasisEnabled ? loudness : SoundLoudness.Ambient,
+            _settings.AmbientMarkerOpacityPercent,
+            _settings.LoudMarkerSizePercent,
+            _settings.LoudMarkerOpacityPercent);
+
+    private void DrawDirectionMarker(
+        Graphics graphics,
+        PointF position,
+        OverlayMetrics metrics,
+        DirectionMarkerVisual visual)
+    {
+        var fillColor = FadedOverlayColor(visual.Intensity);
+        using var markerBrush = new SolidBrush(fillColor);
+        graphics.FillEllipse(
+            markerBrush,
+            position.X - visual.Size / 2,
+            position.Y - visual.Size / 2,
+            visual.Size,
+            visual.Size);
+
+        if (!visual.IsEmphasized || !_settings.LoudMarkerOutlineEnabled)
+        {
+            return;
+        }
+
+        var displayScale = metrics.MarkerSize / Math.Max(1, _settings.MarkerSize);
+        var outlineThickness = Math.Clamp(
+            _settings.LoudMarkerOutlineThickness * displayScale,
+            1,
+            Math.Max(1, visual.Size / 3));
+        using var outlinePen = new Pen(_loudMarkerOutlineBaseColor, outlineThickness);
+        graphics.DrawEllipse(
+            outlinePen,
+            position.X - visual.Size / 2,
+            position.Y - visual.Size / 2,
+            visual.Size,
+            visual.Size);
     }
 
     private void DrawLabels(Graphics graphics, PointF center, OverlayMetrics metrics)

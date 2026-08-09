@@ -5,4 +5,5 @@ namespace SoundDirectionVisualizer.Core.Direction;
 public sealed record DirectionFrame(
     DateTimeOffset Timestamp,
     StereoLevels Levels,
-    DirectionEstimate Estimate);
+    DirectionEstimate Estimate,
+    SoundLoudness Loudness = SoundLoudness.Ambient);

@@ -17,6 +17,7 @@ Targets plain `net9.0` and has no UI or NAudio dependency.
 - `StereoRmsAnalyzer` converts supported interleaved sample formats to L/R RMS levels.
 - `StereoLevelSmoother` applies exponential smoothing.
 - `AdaptiveStereoCalibration` scales the silence gate to endpoint level and learns a bounded stereo-width model from active frames.
+- `AdaptiveLoudnessClassifier` compares active combined RMS levels with a rolling recent-ambience median and labels short level excursions without identifying their semantic source.
 - `StereoDirectionEstimator` maps L/R levels to zero, one, or two azimuth candidates.
 - `DirectionTrail` stores and expires timestamped candidates.
 
@@ -61,7 +62,7 @@ flowchart LR
   Coordinator --> Target
 ```
 
-NAudio invokes its data callback on the capture thread, and `AudioCaptureService` raises `FrameAvailable` after analysis on that thread. The application context only replaces a locked reference there. A 33 ms WinForms timer transfers the latest immutable frame to the overlay on the UI thread. Painting and trail mutation therefore remain on the UI thread.
+NAudio invokes its data callback on the capture thread, and `AudioCaptureService` raises `FrameAvailable` after direction and loudness analysis on that thread. The application context only replaces a locked reference there. A 33 ms WinForms timer transfers the latest immutable frame to the overlay on the UI thread. Painting and trail mutation therefore remain on the UI thread. Loudness classification is retained in each `DirectionFrame` and copied into its `DirectionTrailPoint`, so current and delayed markers keep the same emphasis class throughout their visual lifetime.
 
 `GameWindowMonitor` includes the detected process ID, executable path, and Steam game installation directory in its target result. Executable paths are queried with `PROCESS_QUERY_LIMITED_INFORMATION` before falling back to managed `Process.MainModule`; this permits normal path verification for protected processes such as DayZ's BattlEye-launched game process without bypassing or modifying anti-cheat behavior.
 
@@ -82,7 +83,7 @@ The form is only large enough to contain the compass rather than covering the en
 
 The transparency key background and all visible geometry are painted with opaque colors so GDI+ cannot blend the chosen color with the chroma key. The WinForms window `Opacity` property controls the complete overlay's percentage transparency. Whole-overlay size is calculated in the platform-independent core as a percentage of the current target display height and applies to radius, line width, markers, listener point, tick marks, labels, and window padding together. The default size is 110% of the target display height.
 
-Rendering is split into independently enabled layers: compass ring, cardinal ticks, current direction rays, current direction markers, listener dot, fading history trail, and compass labels. A master overlay toggle controls the window without changing the individual layer selections.
+Rendering is split into independently enabled layers: compass ring, cardinal ticks, current direction rays, current direction markers, listener dot, fading history trail, and compass labels. A master overlay toggle controls the window without changing the individual layer selections. Marker size and visual intensity are calculated deterministically from freshness and loudness. A normal current marker uses the same result as a fresh normal trail point; emphasized markers apply their configured size multiplier and optional outline in both layers.
 
 ## Display targeting
 

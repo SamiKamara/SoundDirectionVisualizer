@@ -1,6 +1,11 @@
+using SoundDirectionVisualizer.Core.Audio;
+
 namespace SoundDirectionVisualizer.Core.Direction;
 
-public sealed record DirectionTrailPoint(double Azimuth, DateTimeOffset Timestamp);
+public sealed record DirectionTrailPoint(
+    double Azimuth,
+    DateTimeOffset Timestamp,
+    SoundLoudness Loudness);
 
 public sealed class DirectionTrail
 {
@@ -8,7 +13,10 @@ public sealed class DirectionTrail
 
     public IReadOnlyList<DirectionTrailPoint> Points => _points;
 
-    public void Add(DirectionEstimate estimate, DateTimeOffset timestamp)
+    public void Add(
+        DirectionEstimate estimate,
+        DateTimeOffset timestamp,
+        SoundLoudness loudness = SoundLoudness.Ambient)
     {
         if (estimate.IsQuiet)
         {
@@ -17,7 +25,10 @@ public sealed class DirectionTrail
 
         foreach (var azimuth in estimate.CandidateAzimuths)
         {
-            _points.Add(new DirectionTrailPoint(StereoDirectionEstimator.Normalize(azimuth), timestamp));
+            _points.Add(new DirectionTrailPoint(
+                StereoDirectionEstimator.Normalize(azimuth),
+                timestamp,
+                loudness));
         }
     }
 

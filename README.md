@@ -8,9 +8,10 @@ The first version deliberately supports **stereo output only**. Stereo provides 
 
 - Automatic process-loopback capture from the detected Steam game, with selected-output WASAPI loopback as a fallback
 - RMS-based stereo direction estimate with automatic output-level and stereo-width calibration
+- Adaptive loud-sound classification relative to recent ambience, with separately styled current and delayed markers
 - Optional manual smoothing, silence-threshold, and hard-pan calibration controls
 - Click-through, always-on-top compass overlay with current rays and a fading history trail
-- Live-previewed color, percentage opacity, display-relative whole-overlay size, thickness, marker size, labels, position, and history duration
+- Live-previewed color, percentage opacity, display-relative whole-overlay size, thickness, marker size, ambient/loud marker emphasis, labels, position, and history duration
 - Independent visibility toggles for the compass ring, cardinal ticks, current rays, current markers, listener dot, history trail, and F/B/L/R labels
 - Automatic display targeting for a detected Steam game window
 - Manual display selection and a display-cycling hotkey
@@ -45,13 +46,14 @@ All bindings can be changed. A binding can be cleared with Delete, except the re
 
 Direct detected-game audio capture and automatic audio calibration are enabled by default. When a Steam game is detected, its process audio is analyzed before the physical headset endpoint; this preserves L/R information on devices whose output loopback is dual mono after spatial-audio processing. If no game is detected or direct capture is unavailable, the selected Windows output is used automatically. Calibration scales the silence gate down for quiet sources, learns the usual stereo width, and immediately adds headroom when a wider transient such as a gunshot arrives so it is not clipped to an exact side by stale ambience calibration. Calibration restarts when the capture source changes. Both behaviors can be changed on the Audio tab.
 
-The overlay is enabled by default with a white color, 40% opacity, a size of 110% of the target display height, 3 px line thickness, an 8 px direction marker, zero horizontal and vertical offsets, and a five-second trail. Only the current direction markers and fading direction trail are visible by default; every layer can be enabled independently on the Overlay tab.
+The overlay is enabled by default with a white color, 40% opacity, a size of 110% of the target display height, 3 px line thickness, an 8 px direction-marker scale, zero horizontal and vertical offsets, and a five-second trail. A normal current marker starts at the same size as a fresh delayed marker and uses 70% relative marker opacity. Loud-sound emphasis is enabled with a `2.5 ×` recent-ambience threshold; loud current and delayed markers default to 150% size, 100% relative marker opacity, and a 2 px black outline. All loud-detection and emphasis values are adjustable. Only the current direction markers and fading direction trail are visible by default; every layer can be enabled independently on the Overlay tab.
 
 ## How to read the overlay
 
 - `F`, `B`, `L`, and `R` mean front, back, left, and right relative to the player.
 - Bright rays and dots are the current direction candidates.
 - Fading dots are recent candidates.
+- Larger outlined dots identify frames classified as loud relative to the recent ambience; this is a level distinction, not a sound-type recognizer.
 - Two candidates are normal for stereo because the same left/right balance fits a front and a back direction.
 - A single side candidate appears near a modelled hard-left or hard-right pan.
 - During silence the current rays disappear, while existing history fades out.

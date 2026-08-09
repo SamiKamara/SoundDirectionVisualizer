@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using SoundDirectionVisualizer.App;
 using SoundDirectionVisualizer.App.Services;
+using SoundDirectionVisualizer.Core.Audio;
 using SoundDirectionVisualizer.Core.Direction;
 
 if (args.Length > 0 && args[0].Equals("--resolve-game-audio", StringComparison.OrdinalIgnoreCase))
@@ -79,6 +80,9 @@ var loudFrameThreshold = Percentile(combinedLevels, 0.90);
 var loudFrames = active
     .Where(frame => frame.Levels.CombinedRms >= loudFrameThreshold)
     .ToArray();
+var emphasizedFrames = active
+    .Where(frame => frame.Loudness == SoundLoudness.Loud)
+    .ToArray();
 var hardSideFrames = active.Count(frame => frame.Estimate.CandidateAzimuths.Count == 1);
 var loudHardSideFrames = loudFrames.Count(frame => frame.Estimate.CandidateAzimuths.Count == 1);
 
@@ -94,6 +98,12 @@ Console.WriteLine(
     $"p90={Percentile(absoluteBalances, 0.90):F6} " +
     $"p99={Percentile(absoluteBalances, 0.99):F6} " +
     $"max={Percentile(absoluteBalances, 1):F6}");
+Console.WriteLine(
+    $"Combined level p50={Percentile(combinedLevels, 0.50):F6} " +
+    $"p90={Percentile(combinedLevels, 0.90):F6} " +
+    $"p99={Percentile(combinedLevels, 0.99):F6} " +
+    $"max={Percentile(combinedLevels, 1):F6}");
+Console.WriteLine($"Classified loud frames: {emphasizedFrames.Length}/{active.Length}");
 Console.WriteLine(
     $"Exact hard-side frames: {hardSideFrames}/{active.Length}; " +
     $"loudest decile: {loudHardSideFrames}/{loudFrames.Length}");

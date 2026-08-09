@@ -18,6 +18,7 @@ The core test suite currently covers:
 - narrow- and wide-stereo calibration plus minimum-width noise protection;
 - immediate headroom and gradual release for wider transients after narrow ambience;
 - preservation of an exact side only for a true single-channel hard pan;
+- adaptive loudness warm-up, recent-ambience thresholding, sustained-level adaptation, and reset;
 - calibration reset between output devices;
 - float32 and PCM16/24/32 RMS decoding;
 - explicit rejection of non-stereo input in version 1;
@@ -29,6 +30,7 @@ The core test suite currently covers:
 - limited-information executable-path resolution and invalid-process handling;
 - Steam game-install boundary resolution, including sibling-prefix rejection;
 - same-game audio-process selection, strongest-session preference, and detected-process fallback;
+- equal ambient spawn/fresh-trail sizing plus loud size, intensity, delayed-state, and outline rendering;
 - independent rendering and complete hiding of every overlay element layer.
 
 Add tests in the same change whenever direction math, sample decoding, thresholds, candidate behavior, or history behavior changes. Every newly supported sample format or channel layout needs a deterministic byte-level fixture.
@@ -57,18 +59,21 @@ Before a user-facing release:
 8. After steady narrow ambience, produce a louder directional transient and confirm it remains a front/back candidate pair instead of clipping to exactly left or right; a true single-channel hard pan may still meet at the side.
 9. Confirm quiet-device audio remains visible, center shows front/back, side pans spread away from that axis after several active frames, and history expires.
 10. Confirm the game retains keyboard and mouse focus while the overlay is visible.
-11. Confirm color, percentage opacity, display-height size, dimensions, offsets, labels, and trail settings preview immediately while editing.
-12. Press Cancel and confirm the previously saved appearance is restored; reopen settings, change values, press Save, and confirm they persist.
-13. Toggle the ring, cardinal ticks, current rays, current markers, listener dot, trail, and labels independently; confirm only the selected layers remain.
-14. Confirm overlay toggle and settings hotkeys work globally.
-15. Confirm manual display selection and display cycling on a multi-monitor system.
-16. With Steam available, move a borderless game between displays and confirm auto targeting follows it.
-17. Turn automatic display targeting off while preferred game audio remains on; confirm the overlay stays on the manual display while audio still follows the game process.
-18. Disconnect/reconnect a display and confirm the app falls back without exiting.
-19. Disable automatic calibration and confirm the manual silence-threshold and hard-pan controls become available and retain the legacy fixed behavior.
-20. Select a non-stereo endpoint, disable direct game capture, and confirm a clear error appears without a crash.
-21. Launch a second app instance and confirm it reopens the existing settings window.
-22. Exit from the tray and confirm capture, overlay, hotkeys, and notification icon stop.
+11. After at least a second of steady ambience, produce a distinctly louder sound and confirm its current and delayed markers use the configured larger size, stronger visual opacity, and outline.
+12. Confirm a normal current marker is the same size as a fresh normal trail marker, and that the loud marker returns to normal after the sound level stays steady long enough to become the new ambience.
+13. Change the loud threshold, both marker opacities, loud size, outline visibility/color/thickness, and master emphasis toggle; confirm styling previews live and detection changes after Save restarts capture.
+14. Confirm color, percentage opacity, display-height size, dimensions, offsets, labels, and trail settings preview immediately while editing.
+15. Press Cancel and confirm the previously saved appearance is restored; reopen settings, change values, press Save, and confirm they persist.
+16. Toggle the ring, cardinal ticks, current rays, current markers, listener dot, trail, and labels independently; confirm only the selected layers remain.
+17. Confirm overlay toggle and settings hotkeys work globally.
+18. Confirm manual display selection and display cycling on a multi-monitor system.
+19. With Steam available, move a borderless game between displays and confirm auto targeting follows it.
+20. Turn automatic display targeting off while preferred game audio remains on; confirm the overlay stays on the manual display while audio still follows the game process.
+21. Disconnect/reconnect a display and confirm the app falls back without exiting.
+22. Disable automatic calibration and confirm the manual silence-threshold and hard-pan controls become available and retain the legacy fixed behavior.
+23. Select a non-stereo endpoint, disable direct game capture, and confirm a clear error appears without a crash.
+24. Launch a second app instance and confirm it reopens the existing settings window.
+25. Exit from the tray and confirm capture, overlay, hotkeys, and notification icon stop.
 
 Record the Windows version, scaling, display layout, endpoint name, endpoint format, and game display mode for failures.
 
@@ -82,4 +87,4 @@ $game = Get-Process -Name DayZ_x64
 dotnet run --project .\tools\SoundDirectionVisualizer.ProcessAudioProbe\SoundDirectionVisualizer.ProcessAudioProbe.csproj --configuration Release -- $game.Id 15
 ```
 
-For DayZ, the resolver should report `DayZ_x64` as both the detected window and selected audio process even though managed full-module access is restricted. The capture source should then be `Game: DayZ_x64`, with a matching process ID. A directional sample should produce non-zero signed and absolute balance values. The exact hard-side counter should stay at zero for ordinary wider transients and increase only for a genuinely single-channel pan. The tool retains only aggregate levels and candidate counts in memory and does not write or forward captured audio.
+For DayZ, the resolver should report `DayZ_x64` as both the detected window and selected audio process even though managed full-module access is restricted. The capture source should then be `Game: DayZ_x64`, with a matching process ID. A directional sample should produce non-zero signed and absolute balance values. The exact hard-side counter should stay at zero for ordinary wider transients and increase only for a genuinely single-channel pan. Combined-level percentiles and the classified-loud frame count help tune the relative threshold. The tool retains only aggregate levels, classifications, and candidate counts in memory and does not write or forward captured audio.

@@ -13,6 +13,7 @@ public sealed class AudioCaptureService : IDisposable
 
     private readonly StereoLevelSmoother _smoother = new();
     private readonly AdaptiveStereoCalibration _calibration = new();
+    private readonly AdaptiveLoudnessClassifier _loudnessClassifier = new();
     private readonly SemaphoreSlim _transitionGate = new(1, 1);
     private MMDeviceEnumerator? _enumerator;
     private MMDevice? _device;
@@ -23,6 +24,8 @@ public sealed class AudioCaptureService : IDisposable
     private double _silenceThreshold;
     private double _modelMaximumBalance;
     private bool _automaticCalibration;
+    private bool _loudSoundEmphasisEnabled;
+    private double _loudSoundThresholdMultiplier;
     private bool _disposed;
 
     public event EventHandler<DirectionFrame>? FrameAvailable;
@@ -166,6 +169,7 @@ public sealed class AudioCaptureService : IDisposable
         FormatDescription = capture.WaveFormat.ToString();
         _smoother.Reset();
         _calibration.Reset();
+        _loudnessClassifier.Reset();
 
         _dataAvailableHandler = (buffer, _, _, _) => HandleDataAvailable(buffer);
         try
@@ -187,8 +191,11 @@ public sealed class AudioCaptureService : IDisposable
         _silenceThreshold = settings.SilenceRmsThreshold;
         _modelMaximumBalance = settings.ModelMaximumBalance;
         _automaticCalibration = settings.AutomaticAudioCalibration;
+        _loudSoundEmphasisEnabled = settings.LoudSoundEmphasisEnabled;
+        _loudSoundThresholdMultiplier = settings.LoudSoundThresholdMultiplier;
         _smoother.Reset();
         _calibration.Reset();
+        _loudnessClassifier.Reset();
     }
 
     private void StopCore()
@@ -224,6 +231,7 @@ public sealed class AudioCaptureService : IDisposable
         FormatDescription = null;
         _smoother.Reset();
         _calibration.Reset();
+        _loudnessClassifier.Reset();
     }
 
     private void HandleDataAvailable(ReadOnlySpan<byte> buffer)
@@ -242,10 +250,16 @@ public sealed class AudioCaptureService : IDisposable
                 smoothed,
                 calibration.SilenceRmsThreshold,
                 calibration.ModelMaximumBalance);
+            var loudness = _loudSoundEmphasisEnabled
+                ? _loudnessClassifier.Update(
+                    smoothed,
+                    calibration.SilenceRmsThreshold,
+                    _loudSoundThresholdMultiplier)
+                : SoundLoudness.Ambient;
 
             FrameAvailable?.Invoke(
                 this,
-                new DirectionFrame(DateTimeOffset.UtcNow, smoothed, estimate));
+                new DirectionFrame(DateTimeOffset.UtcNow, smoothed, estimate, loudness));
         }
         catch (Exception exception)
         {

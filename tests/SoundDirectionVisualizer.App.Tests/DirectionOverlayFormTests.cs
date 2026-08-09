@@ -124,6 +124,53 @@ public sealed class DirectionOverlayFormTests
         Assert.Equal(0, visiblePixels);
     }
 
+    [Fact]
+    public void LoudCurrentMarkerIsLargerAndHasTheConfiguredBlackOutline()
+    {
+        var markers = RunOnStaThread(() =>
+        {
+            var ambient = RenderCurrentMarker(SoundLoudness.Ambient);
+            var loud = RenderCurrentMarker(SoundLoudness.Loud);
+            return (ambient, loud);
+        });
+
+        Assert.True(markers.loud.VisiblePixels > markers.ambient.VisiblePixels);
+        Assert.Equal(0, markers.ambient.BlackPixels);
+        Assert.True(markers.loud.BlackPixels > 0);
+    }
+
+    [Fact]
+    public void LoudDelayedMarkerRetainsTheConfiguredBlackOutline()
+    {
+        var delayed = RunOnStaThread(() => RenderMarker(
+            SoundLoudness.Loud,
+            showCurrentMarker: false,
+            showTrail: true,
+            frameAge: TimeSpan.FromSeconds(1)));
+
+        Assert.True(delayed.VisiblePixels > 0);
+        Assert.True(delayed.BlackPixels > 0);
+    }
+
+    [Fact]
+    public void LoudEmphasisMasterToggleRendersLoudFrameAsAmbient()
+    {
+        var markers = RunOnStaThread(() =>
+        {
+            var ambient = RenderCurrentMarker(SoundLoudness.Ambient);
+            var disabledLoud = RenderMarker(
+                SoundLoudness.Loud,
+                showCurrentMarker: true,
+                showTrail: false,
+                frameAge: TimeSpan.Zero,
+                loudEmphasisEnabled: false);
+            return (ambient, disabledLoud);
+        });
+
+        Assert.Equal(markers.ambient.VisiblePixels, markers.disabledLoud.VisiblePixels);
+        Assert.Equal(0, markers.disabledLoud.BlackPixels);
+    }
+
     private static AppSettings CreateAllElementsHiddenSettings() => new()
     {
         OverlayColorHex = "#FFFF00",
@@ -170,6 +217,72 @@ public sealed class DirectionOverlayFormTests
         }
 
         return visiblePixels;
+    }
+
+    private static (int VisiblePixels, int BlackPixels) RenderCurrentMarker(SoundLoudness loudness) =>
+        RenderMarker(
+            loudness,
+            showCurrentMarker: true,
+            showTrail: false,
+            frameAge: TimeSpan.Zero);
+
+    private static (int VisiblePixels, int BlackPixels) RenderMarker(
+        SoundLoudness loudness,
+        bool showCurrentMarker,
+        bool showTrail,
+        TimeSpan frameAge,
+        bool loudEmphasisEnabled = true)
+    {
+        using var form = new DirectionOverlayForm();
+        form.ApplySettings(new AppSettings
+        {
+            OverlayColorHex = "#FFFFFF",
+            OverlayOpacityPercent = 100,
+            OverlayHeightPercent = 10,
+            MarkerSize = 20,
+            AmbientMarkerOpacityPercent = 70,
+            LoudMarkerSizePercent = 150,
+            LoudMarkerOpacityPercent = 100,
+            LoudMarkerOutlineEnabled = true,
+            LoudMarkerOutlineColorHex = "#000000",
+            LoudMarkerOutlineThickness = 2,
+            LoudSoundEmphasisEnabled = loudEmphasisEnabled,
+            ShowCurrentDirectionMarkers = showCurrentMarker,
+            ShowDirectionTrail = showTrail,
+            TrailDurationSeconds = 5
+        });
+        var estimate = new DirectionEstimate(false, 0.5, 0.5, 0, new[] { 0d });
+        var now = DateTimeOffset.UtcNow;
+        form.UpdateFrame(
+            new DirectionFrame(now - frameAge, new StereoLevels(0.5, 0.5), estimate, loudness),
+            now);
+
+        using var bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height);
+        form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+        var chromaKey = Color.Magenta.ToArgb();
+        var black = Color.Black.ToArgb();
+        var visiblePixels = 0;
+        var blackPixels = 0;
+
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            for (var x = 0; x < bitmap.Width; x++)
+            {
+                var pixel = bitmap.GetPixel(x, y).ToArgb();
+                if (pixel == chromaKey)
+                {
+                    continue;
+                }
+
+                visiblePixels++;
+                if (pixel == black)
+                {
+                    blackPixels++;
+                }
+            }
+        }
+
+        return (visiblePixels, blackPixels);
     }
 
     private static T RunOnStaThread<T>(Func<T> action)

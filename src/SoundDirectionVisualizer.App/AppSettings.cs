@@ -18,6 +18,10 @@ public sealed class AppSettings
 
     public double ModelMaximumBalance { get; set; } = 0.50;
 
+    public bool LoudSoundEmphasisEnabled { get; set; } = true;
+
+    public double LoudSoundThresholdMultiplier { get; set; } = 2.5;
+
     public bool AutoDetectSteamGameMonitor { get; set; } = true;
 
     public string? SelectedMonitorDeviceName { get; set; }
@@ -31,6 +35,18 @@ public sealed class AppSettings
     public int RingThickness { get; set; } = 3;
 
     public int MarkerSize { get; set; } = 8;
+
+    public int AmbientMarkerOpacityPercent { get; set; } = 70;
+
+    public int LoudMarkerSizePercent { get; set; } = 150;
+
+    public int LoudMarkerOpacityPercent { get; set; } = 100;
+
+    public bool LoudMarkerOutlineEnabled { get; set; } = true;
+
+    public string LoudMarkerOutlineColorHex { get; set; } = "#000000";
+
+    public int LoudMarkerOutlineThickness { get; set; } = 2;
 
     public int HorizontalOffset { get; set; }
 
@@ -69,6 +85,8 @@ public sealed class AppSettings
             SilenceRmsThreshold = SilenceRmsThreshold,
             SmoothingFactor = SmoothingFactor,
             ModelMaximumBalance = ModelMaximumBalance,
+            LoudSoundEmphasisEnabled = LoudSoundEmphasisEnabled,
+            LoudSoundThresholdMultiplier = LoudSoundThresholdMultiplier,
             AutoDetectSteamGameMonitor = AutoDetectSteamGameMonitor,
             SelectedMonitorDeviceName = SelectedMonitorDeviceName,
             OverlayColorHex = OverlayColorHex,
@@ -76,6 +94,12 @@ public sealed class AppSettings
             OverlayHeightPercent = OverlayHeightPercent,
             RingThickness = RingThickness,
             MarkerSize = MarkerSize,
+            AmbientMarkerOpacityPercent = AmbientMarkerOpacityPercent,
+            LoudMarkerSizePercent = LoudMarkerSizePercent,
+            LoudMarkerOpacityPercent = LoudMarkerOpacityPercent,
+            LoudMarkerOutlineEnabled = LoudMarkerOutlineEnabled,
+            LoudMarkerOutlineColorHex = LoudMarkerOutlineColorHex,
+            LoudMarkerOutlineThickness = LoudMarkerOutlineThickness,
             HorizontalOffset = HorizontalOffset,
             VerticalOffset = VerticalOffset,
             ShowCompassRing = ShowCompassRing,
@@ -97,6 +121,7 @@ public sealed class AppSettings
         SilenceRmsThreshold = Math.Clamp(SilenceRmsThreshold, 0.00001, 0.1);
         SmoothingFactor = Math.Clamp(SmoothingFactor, 0.01, 1);
         ModelMaximumBalance = Math.Clamp(ModelMaximumBalance, 0.05, 1);
+        LoudSoundThresholdMultiplier = Math.Clamp(LoudSoundThresholdMultiplier, 1.1, 10);
         OverlayOpacityPercent = OverlayOpacityPercent < 0
             ? 40
             : Math.Clamp(OverlayOpacityPercent, 0, 100);
@@ -116,6 +141,11 @@ public sealed class AppSettings
         OverlayHeightPercent = Math.Clamp(OverlayHeightPercent, 10, 200);
         RingThickness = Math.Clamp(RingThickness, 1, 12);
         MarkerSize = Math.Clamp(MarkerSize, 4, 32);
+        AmbientMarkerOpacityPercent = Math.Clamp(AmbientMarkerOpacityPercent, 10, 100);
+        LoudMarkerSizePercent = Math.Clamp(LoudMarkerSizePercent, 100, 300);
+        LoudMarkerOpacityPercent = Math.Clamp(LoudMarkerOpacityPercent, 10, 100);
+        LoudMarkerOutlineColorHex = NormalizeColorHex(LoudMarkerOutlineColorHex, "#000000");
+        LoudMarkerOutlineThickness = Math.Clamp(LoudMarkerOutlineThickness, 1, 8);
         HorizontalOffset = Math.Clamp(HorizontalOffset, -4000, 4000);
         VerticalOffset = Math.Clamp(VerticalOffset, -4000, 4000);
         TrailDurationSeconds = Math.Clamp(TrailDurationSeconds, 0.5, 15);
@@ -154,5 +184,35 @@ public sealed class AppSettings
         Normalize();
         var color = ColorTranslator.FromHtml(OverlayColorHex);
         return Color.FromArgb(255, color);
+    }
+
+    public Color GetLoudMarkerOutlineColor()
+    {
+        try
+        {
+            return ColorTranslator.FromHtml(LoudMarkerOutlineColorHex);
+        }
+        catch
+        {
+            return Color.Black;
+        }
+    }
+
+    private static string NormalizeColorHex(string? colorHex, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(colorHex))
+        {
+            return fallback;
+        }
+
+        try
+        {
+            var color = ColorTranslator.FromHtml(colorHex);
+            return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        }
+        catch
+        {
+            return fallback;
+        }
     }
 }

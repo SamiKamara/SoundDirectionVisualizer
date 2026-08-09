@@ -65,6 +65,19 @@ A plain stereo amplitude pair contains no general, reliable front/back label. Th
 
 The two rays are therefore a feature: they communicate the information that is present and the ambiguity that remains.
 
+## Loud-sound classification
+
+Loud emphasis is a relative level classifier, not gunshot detection or semantic audio recognition. It uses the smoothed combined RMS level already available to the direction pipeline:
+
+```text
+combined_level = L_rms + R_rms
+loud_threshold = median(recent_active_levels) × configured_multiplier
+```
+
+The classifier keeps the latest 256 active levels and uses their median as the recent ambience baseline. It waits for 32 active samples before classifying anything as loud, so application startup does not guess without context. The current level is classified before it is inserted into the history; a transient therefore cannot raise its own threshold. The default multiplier is `2.5`. A larger multiplier produces fewer emphasized markers, while a smaller value is more sensitive.
+
+A sustained new level eventually occupies most of the rolling window and becomes the new ambience instead of remaining emphasized forever. Silence does not train the baseline. Classifier state resets whenever capture starts or its source changes. Loud classification affects only marker presentation and does not change direction estimation, stereo ambiguity, or trail duration.
+
 ## Calibration guidance
 
 - Keep automatic calibration enabled for normal use and after changing devices or game audio modes.
@@ -81,6 +94,7 @@ Settings should be tested with a repeatable stereo pan sample before being tuned
 ## Known limitations
 
 - Multiple simultaneous sources are combined into one L/R energy balance.
+- Relative level classification cannot determine whether a loud frame is a gunshot, UI sound, nearby engine, music peak, or several simultaneous sources.
 - Process capture includes the selected same-installation audio process tree. Audio routed through a process outside the verified Steam game directory may still require endpoint fallback.
 - Direct game capture requires Windows build 19041 or newer and falls back automatically when unavailable.
 - An endpoint-loopback fallback that exposes true dual mono contains no recoverable left/right direction information.
