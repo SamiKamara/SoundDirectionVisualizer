@@ -129,6 +129,8 @@ public sealed class DirectionOverlayFormTests
         OverlayColorHex = "#FFFF00",
         OverlayOpacityPercent = 100,
         OverlayHeightPercent = 10,
+        // Avoid a one-pixel trail ellipse whose rasterization varies with runner display metrics.
+        MarkerSize = 32,
         ShowCompassRing = false,
         ShowCardinalTicks = false,
         ShowCurrentDirectionRays = false,
