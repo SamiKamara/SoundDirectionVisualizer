@@ -9,6 +9,7 @@ namespace SoundDirectionVisualizer.App.Services;
 public sealed class AudioCaptureService : IDisposable
 {
     private readonly StereoLevelSmoother _smoother = new();
+    private readonly AdaptiveStereoCalibration _calibration = new();
     private MMDeviceEnumerator? _enumerator;
     private MMDevice? _device;
     private WasapiLoopbackCapture? _capture;
@@ -16,6 +17,7 @@ public sealed class AudioCaptureService : IDisposable
     private double _smoothingFactor;
     private double _silenceThreshold;
     private double _modelMaximumBalance;
+    private bool _automaticCalibration;
 
     public event EventHandler<DirectionFrame>? FrameAvailable;
 
@@ -46,9 +48,11 @@ public sealed class AudioCaptureService : IDisposable
         _smoothingFactor = settings.SmoothingFactor;
         _silenceThreshold = settings.SilenceRmsThreshold;
         _modelMaximumBalance = settings.ModelMaximumBalance;
+        _automaticCalibration = settings.AutomaticAudioCalibration;
         ActiveDeviceName = _device.FriendlyName;
         FormatDescription = _capture.WaveFormat.ToString();
         _smoother.Reset();
+        _calibration.Reset();
 
         _capture.DataAvailable += HandleDataAvailable;
         _capture.RecordingStopped += HandleRecordingStopped;
@@ -81,6 +85,7 @@ public sealed class AudioCaptureService : IDisposable
         ActiveDeviceName = null;
         FormatDescription = null;
         _smoother.Reset();
+        _calibration.Reset();
     }
 
     public void Dispose() => Stop();
@@ -94,10 +99,13 @@ public sealed class AudioCaptureService : IDisposable
                 2,
                 _encoding);
             var smoothed = _smoother.Update(levels, _smoothingFactor);
+            var calibration = _automaticCalibration
+                ? _calibration.Update(smoothed, _silenceThreshold, _modelMaximumBalance)
+                : new StereoCalibration(_silenceThreshold, _modelMaximumBalance);
             var estimate = StereoDirectionEstimator.Estimate(
                 smoothed,
-                _silenceThreshold,
-                _modelMaximumBalance);
+                calibration.SilenceRmsThreshold,
+                calibration.ModelMaximumBalance);
 
             FrameAvailable?.Invoke(
                 this,

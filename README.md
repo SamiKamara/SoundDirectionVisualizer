@@ -7,7 +7,8 @@ The first version deliberately supports **stereo output only**. Stereo provides 
 ## Current features
 
 - WASAPI loopback capture from the default or a selected Windows output device
-- RMS-based stereo direction estimate with adjustable smoothing, silence threshold, and hard-pan calibration
+- RMS-based stereo direction estimate with automatic output-level and stereo-width calibration
+- Optional manual smoothing, silence-threshold, and hard-pan calibration controls
 - Click-through, always-on-top compass overlay with current rays and a fading history trail
 - Live-previewed color, percentage opacity, display-relative whole-overlay size, thickness, marker size, labels, position, and history duration
 - Independent visibility toggles for the compass ring, cardinal ticks, current rays, current markers, listener dot, history trail, and F/B/L/R labels
@@ -39,6 +40,8 @@ The settings window opens on the first launch. Closing the settings window leave
 - `Ctrl+Alt+D`: open settings
 
 All bindings can be changed. A binding can be cleared with Delete, except the required overlay toggle, which falls back to its default if invalid.
+
+Automatic audio calibration is enabled by default. It scales the silence gate down for quiet loopback devices and learns the stereo width actually produced by the selected device and game. Calibration restarts when capture starts or the output device changes. It can be disabled on the Audio tab to use the manual silence-threshold and hard-pan values.
 
 The overlay is enabled by default with a white color, 40% opacity, a size of 110% of the target display height, 3 px line thickness, an 8 px direction marker, zero horizontal and vertical offsets, and a five-second trail. Only the current direction markers and fading direction trail are visible by default; every layer can be enabled independently on the Overlay tab.
 

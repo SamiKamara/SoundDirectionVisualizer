@@ -1,4 +1,5 @@
 using SoundDirectionVisualizer.App;
+using System.Text.Json;
 
 namespace SoundDirectionVisualizer.App.Tests;
 
@@ -12,6 +13,7 @@ public sealed class AppSettingsTests
         settings.Normalize();
 
         Assert.True(settings.OverlayEnabled);
+        Assert.True(settings.AutomaticAudioCalibration);
         Assert.Equal(0.50, settings.ModelMaximumBalance, precision: 6);
         Assert.Equal("#FFFFFF", settings.OverlayColorHex);
         Assert.Equal(40, settings.OverlayOpacityPercent);
@@ -45,5 +47,14 @@ public sealed class AppSettingsTests
         Assert.Equal(110, settings.OverlayHeightPercent);
         Assert.Equal(40, settings.OverlayOpacityPercent);
         Assert.Equal(0, settings.VerticalOffset);
+    }
+
+    [Fact]
+    public void ExistingSettingsWithoutCalibrationFieldEnableAutomaticCalibration()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>("{\"OverlayEnabled\":true}");
+
+        Assert.NotNull(settings);
+        Assert.True(settings.AutomaticAudioCalibration);
     }
 }

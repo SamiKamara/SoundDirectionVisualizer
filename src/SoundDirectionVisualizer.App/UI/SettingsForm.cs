@@ -4,6 +4,11 @@ public sealed class SettingsForm : Form
 {
     private readonly CheckBox _overlayEnabled = new() { Text = "Enable overlay", AutoSize = true };
     private readonly ComboBox _audioDevice = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly CheckBox _automaticAudioCalibration = new()
+    {
+        Text = "Automatically adapt to output level and stereo width (recommended)",
+        AutoSize = true
+    };
     private readonly NumericUpDown _silenceThreshold = CreateDecimalNumeric(0.00001m, 0.1m, 5, 0.00010m);
     private readonly NumericUpDown _smoothing = CreateDecimalNumeric(0.01m, 1m, 2, 0.01m);
     private readonly NumericUpDown _modelBalance = CreateDecimalNumeric(0.05m, 1m, 2, 0.05m);
@@ -84,6 +89,7 @@ public sealed class SettingsForm : Form
         Controls.Add(root);
 
         _autoDetect.CheckedChanged += (_, _) => _monitor.Enabled = !_autoDetect.Checked;
+        _automaticAudioCalibration.CheckedChanged += (_, _) => UpdateAudioCalibrationControls();
         _showTrail.CheckedChanged += (_, _) => _trailDuration.Enabled = _showTrail.Checked;
         _colorButton.Click += (_, _) => ChooseColor();
 
@@ -126,12 +132,16 @@ public sealed class SettingsForm : Form
         var page = CreateTab("Audio");
         var layout = CreateTwoColumnTable();
         AddRow(layout, "Output device", _audioDevice);
+        AddWideRow(layout, _automaticAudioCalibration);
         AddRow(layout, "Silence threshold (RMS)", _silenceThreshold);
         AddRow(layout, "Smoothing factor", _smoothing);
         AddRow(layout, "Hard-pan model balance", _modelBalance);
         AddWideRow(layout, CreateNote(
             "Version 1 captures the selected Windows output through WASAPI loopback and requires exactly two channels. " +
             "The default output follows Windows when the app is restarted or settings are applied."));
+        AddWideRow(layout, CreateNote(
+            "Automatic calibration scales the silence gate to low-volume devices and learns the stereo width used by the current output. " +
+            "Disable it only when using the manual silence threshold and hard-pan balance values."));
         AddWideRow(layout, CreateNote(
             "Stereo identifies left/right balance, but cannot distinguish front from back. The overlay therefore shows both valid candidates."));
         page.Controls.Add(layout);
@@ -254,6 +264,7 @@ public sealed class SettingsForm : Form
             ?? _monitor.Items.Cast<DisplayOption>().FirstOrDefault();
 
         _overlayEnabled.Checked = settings.OverlayEnabled;
+        _automaticAudioCalibration.Checked = settings.AutomaticAudioCalibration;
         _silenceThreshold.Value = (decimal)settings.SilenceRmsThreshold;
         _smoothing.Value = (decimal)settings.SmoothingFactor;
         _modelBalance.Value = (decimal)settings.ModelMaximumBalance;
@@ -280,6 +291,7 @@ public sealed class SettingsForm : Form
         _toggleHotkey.Hotkey = settings.ToggleHotkey;
         _cycleHotkey.Hotkey = settings.CycleMonitorHotkey;
         _openSettingsHotkey.Hotkey = settings.OpenSettingsHotkey;
+        UpdateAudioCalibrationControls();
     }
 
     private void ChooseColor()
@@ -316,6 +328,7 @@ public sealed class SettingsForm : Form
         {
             OverlayEnabled = _overlayEnabled.Checked,
             AudioDeviceId = selectedEndpoint?.Id,
+            AutomaticAudioCalibration = _automaticAudioCalibration.Checked,
             SilenceRmsThreshold = (double)_silenceThreshold.Value,
             SmoothingFactor = (double)_smoothing.Value,
             ModelMaximumBalance = (double)_modelBalance.Value,
@@ -352,6 +365,13 @@ public sealed class SettingsForm : Form
         }
 
         OverlayPreviewChanged?.Invoke(ReadSettingsFromControls());
+    }
+
+    private void UpdateAudioCalibrationControls()
+    {
+        var manualCalibration = !_automaticAudioCalibration.Checked;
+        _silenceThreshold.Enabled = manualCalibration;
+        _modelBalance.Enabled = manualCalibration;
     }
 
     private static TabPage CreateTab(string text) => new(text)

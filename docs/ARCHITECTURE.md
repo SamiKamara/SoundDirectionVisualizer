@@ -16,6 +16,7 @@ Targets plain `net9.0` and has no UI or NAudio dependency.
 
 - `StereoRmsAnalyzer` converts supported interleaved sample formats to L/R RMS levels.
 - `StereoLevelSmoother` applies exponential smoothing.
+- `AdaptiveStereoCalibration` scales the silence gate to endpoint level and learns a bounded stereo-width model from active frames.
 - `StereoDirectionEstimator` maps L/R levels to zero, one, or two azimuth candidates.
 - `DirectionTrail` stores and expires timestamped candidates.
 

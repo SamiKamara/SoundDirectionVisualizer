@@ -23,7 +23,7 @@ smoothed = previous + smoothing_factor × (new - previous)
 
 The default smoothing factor is `0.20`. Larger values respond faster; smaller values move more slowly.
 
-No direction candidate is generated when `L_rms + R_rms` is below the configured silence threshold. The default threshold is `0.00125`.
+No direction candidate is generated when `L_rms + R_rms` is below the effective silence threshold. Automatic calibration is enabled by default because loopback amplitude can vary substantially with the endpoint and its volume path. It tracks a slowly releasing recent peak and sets the effective gate to 0.5% of that peak, with a floor of `0.00001` and the configured manual threshold as a ceiling. Manual mode uses the configured threshold directly; its default is `0.00125`.
 
 ## Balance and azimuth
 
@@ -33,7 +33,9 @@ The normalized stereo balance is:
 balance = (R_rms - L_rms) / (R_rms + L_rms)
 ```
 
-The original prototype assumed a model in which an apparent hard side used a 20/80 energy split, producing a balance magnitude of `0.60`. The adjustable `modelMaximumBalance` now defaults to `0.50`, making the visualization reach the modelled side position at a slightly less extreme L/R difference.
+The original prototype assumed a model in which an apparent hard side used a 20/80 energy split, producing a balance magnitude of `0.60`. The manual `modelMaximumBalance` defaults to `0.50`.
+
+With automatic calibration enabled, the estimator starts with an effective maximum balance of `0.08` and keeps the latest 256 active absolute balance values. Every eight active frames it estimates the output's useful stereo width from the 90th percentile, adds 25% headroom, and gradually moves the effective maximum toward that value. The result is limited to `0.03..modelMaximumBalance`: narrow game/headphone mixes gain useful lateral movement, while tiny channel differences cannot immediately become a hard-side result. Calibration state is reset whenever capture starts or the output device changes.
 
 ```text
 s = clamp(balance / modelMaximumBalance, -1, +1)
@@ -57,6 +59,9 @@ The two rays are therefore a feature: they communicate the information that is p
 
 ## Calibration guidance
 
+- Keep automatic calibration enabled for normal use and after changing devices or game audio modes.
+- Allow a few directional sounds for stereo-width calibration to settle.
+- Disable automatic calibration before adjusting the two manual calibration values.
 - Raise the silence threshold if noise or quiet ambience keeps creating markers.
 - Lower it if relevant quiet sounds disappear.
 - Raise smoothing for a faster but more nervous display.
@@ -68,6 +73,7 @@ Settings should be tested with a repeatable stereo pan sample before being tuned
 ## Known limitations
 
 - Multiple simultaneous sources are combined into one L/R energy balance.
+- Automatic calibration can amplify a narrow L/R energy difference, but cannot recover direction when a binaural mix encodes it only in timing or spectral cues and has equal channel energy.
 - Music, UI sounds, dialogue, reverberation, and game ambience all contribute.
 - Dynamic range compression and per-game mixing affect the estimate.
 - Stereo alone does not provide reliable elevation.

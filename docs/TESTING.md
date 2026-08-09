@@ -14,6 +14,9 @@ The core test suite currently covers:
 - equal-channel front/back candidates;
 - hard-left and hard-right collapse;
 - intermediate mirrored candidates;
+- automatic low-volume silence-gate scaling;
+- narrow- and wide-stereo calibration plus minimum-width noise protection;
+- calibration reset between output devices;
 - float32 and PCM16/24/32 RMS decoding;
 - explicit rejection of non-stereo input in version 1;
 - history expiry;
@@ -40,8 +43,8 @@ Before a user-facing release:
 
 1. Start the app with the default stereo endpoint.
 2. Play silence and confirm no current direction rays appear.
-3. Play a known center, left, right, and sweeping stereo test.
-4. Confirm center shows front/back, side pans approach one side marker, and history expires.
+3. With automatic calibration enabled, play a known center, left, right, and sweeping stereo test at both low and normal endpoint volumes.
+4. Confirm quiet-device audio remains visible, center shows front/back, side pans spread away from that axis after several active frames, and history expires.
 5. Confirm the game retains keyboard and mouse focus while the overlay is visible.
 6. Confirm color, percentage opacity, display-height size, dimensions, offsets, labels, and trail settings preview immediately while editing.
 7. Press Cancel and confirm the previously saved appearance is restored; reopen settings, change values, press Save, and confirm they persist.
@@ -50,8 +53,9 @@ Before a user-facing release:
 10. Confirm manual display selection and display cycling on a multi-monitor system.
 11. With Steam available, move a borderless game between displays and confirm auto targeting follows it.
 12. Disconnect/reconnect a display and confirm the app falls back without exiting.
-13. Select a non-stereo endpoint and confirm a clear error appears without a crash.
-14. Launch a second app instance and confirm it reopens the existing settings window.
-15. Exit from the tray and confirm capture, overlay, hotkeys, and notification icon stop.
+13. Disable automatic calibration and confirm the manual silence-threshold and hard-pan controls become available and retain the legacy fixed behavior.
+14. Select a non-stereo endpoint and confirm a clear error appears without a crash.
+15. Launch a second app instance and confirm it reopens the existing settings window.
+16. Exit from the tray and confirm capture, overlay, hotkeys, and notification icon stop.
 
 Record the Windows version, scaling, display layout, endpoint name, endpoint format, and game display mode for failures.
