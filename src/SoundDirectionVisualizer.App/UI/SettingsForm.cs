@@ -4,6 +4,11 @@ public sealed class SettingsForm : Form
 {
     private readonly CheckBox _overlayEnabled = new() { Text = "Enable overlay", AutoSize = true };
     private readonly ComboBox _audioDevice = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly CheckBox _preferDetectedGameAudio = new()
+    {
+        Text = "Prefer audio captured directly from the detected Steam game (recommended)",
+        AutoSize = true
+    };
     private readonly CheckBox _automaticAudioCalibration = new()
     {
         Text = "Automatically adapt to output level and stereo width (recommended)",
@@ -131,14 +136,16 @@ public sealed class SettingsForm : Form
     {
         var page = CreateTab("Audio");
         var layout = CreateTwoColumnTable();
+        AddWideRow(layout, _preferDetectedGameAudio);
         AddRow(layout, "Output device", _audioDevice);
         AddWideRow(layout, _automaticAudioCalibration);
         AddRow(layout, "Silence threshold (RMS)", _silenceThreshold);
         AddRow(layout, "Smoothing factor", _smoothing);
         AddRow(layout, "Hard-pan model balance", _modelBalance);
         AddWideRow(layout, CreateNote(
-            "Version 1 captures the selected Windows output through WASAPI loopback and requires exactly two channels. " +
-            "The default output follows Windows when the app is restarted or settings are applied."));
+            "By default, audio is captured directly from the detected Steam game process. This preserves stereo direction when a headset " +
+            "or spatial-audio driver exposes only dual mono at its physical output loopback. The selected output device is used as a fallback " +
+            "and whenever direct game capture is disabled or no game is detected. Both modes require exactly two channels."));
         AddWideRow(layout, CreateNote(
             "Automatic calibration scales the silence gate to low-volume devices and learns the stereo width used by the current output. " +
             "Disable it only when using the manual silence threshold and hard-pan balance values."));
@@ -264,6 +271,7 @@ public sealed class SettingsForm : Form
             ?? _monitor.Items.Cast<DisplayOption>().FirstOrDefault();
 
         _overlayEnabled.Checked = settings.OverlayEnabled;
+        _preferDetectedGameAudio.Checked = settings.PreferDetectedGameAudio;
         _automaticAudioCalibration.Checked = settings.AutomaticAudioCalibration;
         _silenceThreshold.Value = (decimal)settings.SilenceRmsThreshold;
         _smoothing.Value = (decimal)settings.SmoothingFactor;
@@ -328,6 +336,7 @@ public sealed class SettingsForm : Form
         {
             OverlayEnabled = _overlayEnabled.Checked,
             AudioDeviceId = selectedEndpoint?.Id,
+            PreferDetectedGameAudio = _preferDetectedGameAudio.Checked,
             AutomaticAudioCalibration = _automaticAudioCalibration.Checked,
             SilenceRmsThreshold = (double)_silenceThreshold.Value,
             SmoothingFactor = (double)_smoothing.Value,

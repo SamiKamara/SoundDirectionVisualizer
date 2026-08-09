@@ -6,7 +6,7 @@ This document records direction, not a release promise. Behavioral work should a
 
 Implemented in the initial project:
 
-- WASAPI loopback capture for a selected stereo render endpoint
+- preferred per-process loopback capture for a detected Steam game with selected-endpoint fallback
 - deterministic sample decoding and RMS analysis
 - adjustable smoothing, silence threshold, and balance model
 - explicit front/back ambiguity
@@ -18,10 +18,12 @@ Near-term hardening:
 
 - test on a wider set of endpoint formats and Windows scaling combinations;
 - add structured diagnostics/export for device format and capture failures;
+- add persistent dual-mono endpoint detection and an in-app capture-health indicator;
 - add an optional calibration view and synthetic pan test;
 - profile overlay painting during sustained high-frequency capture;
 - investigate non-Steam target rules without weakening predictable screen selection;
-- add packaged releases and signed binaries when distribution begins.
+- add packaged releases and signed binaries when distribution begins;
+- move from the pinned NAudio 3 preview to a stable release after process-loopback behavior is verified unchanged.
 
 ## Phase 2: native multichannel output
 

@@ -8,6 +8,8 @@ public sealed class AppSettings
 
     public string? AudioDeviceId { get; set; }
 
+    public bool PreferDetectedGameAudio { get; set; } = true;
+
     public bool AutomaticAudioCalibration { get; set; } = true;
 
     public double SilenceRmsThreshold { get; set; } = 0.00125;
@@ -62,6 +64,7 @@ public sealed class AppSettings
         {
             OverlayEnabled = OverlayEnabled,
             AudioDeviceId = AudioDeviceId,
+            PreferDetectedGameAudio = PreferDetectedGameAudio,
             AutomaticAudioCalibration = AutomaticAudioCalibration,
             SilenceRmsThreshold = SilenceRmsThreshold,
             SmoothingFactor = SmoothingFactor,

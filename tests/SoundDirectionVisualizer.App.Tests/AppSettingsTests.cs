@@ -13,6 +13,7 @@ public sealed class AppSettingsTests
         settings.Normalize();
 
         Assert.True(settings.OverlayEnabled);
+        Assert.True(settings.PreferDetectedGameAudio);
         Assert.True(settings.AutomaticAudioCalibration);
         Assert.Equal(0.50, settings.ModelMaximumBalance, precision: 6);
         Assert.Equal("#FFFFFF", settings.OverlayColorHex);
@@ -56,5 +57,24 @@ public sealed class AppSettingsTests
 
         Assert.NotNull(settings);
         Assert.True(settings.AutomaticAudioCalibration);
+    }
+
+    [Fact]
+    public void ExistingSettingsWithoutGameAudioPreferencePreferDetectedGameAudio()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>("{\"OverlayEnabled\":true}");
+
+        Assert.NotNull(settings);
+        Assert.True(settings.PreferDetectedGameAudio);
+    }
+
+    [Fact]
+    public void ClonePreservesGameAudioPreference()
+    {
+        var settings = new AppSettings { PreferDetectedGameAudio = false };
+
+        var clone = settings.Clone();
+
+        Assert.False(clone.PreferDetectedGameAudio);
     }
 }

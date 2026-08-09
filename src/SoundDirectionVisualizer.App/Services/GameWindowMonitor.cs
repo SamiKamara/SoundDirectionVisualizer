@@ -3,7 +3,11 @@ using System.Diagnostics;
 
 namespace SoundDirectionVisualizer.App.Services;
 
-public sealed record DetectedGameTarget(string ProcessName, string WindowTitle, Screen Screen);
+public sealed record DetectedGameTarget(
+    int ProcessId,
+    string ProcessName,
+    string WindowTitle,
+    Screen Screen);
 
 public sealed class GameWindowMonitor
 {
@@ -146,6 +150,7 @@ public sealed class GameWindowMonitor
             }
 
             return new DetectedGameTarget(
+                process.Id,
                 process.ProcessName,
                 process.MainWindowTitle,
                 Screen.FromHandle(windowHandle));

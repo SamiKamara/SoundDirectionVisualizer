@@ -1,23 +1,29 @@
 using NAudio.CoreAudioApi;
-using NAudio.Dmo;
 using NAudio.Wave;
 using SoundDirectionVisualizer.Core.Audio;
 using SoundDirectionVisualizer.Core.Direction;
+using System.Runtime.Versioning;
 
 namespace SoundDirectionVisualizer.App.Services;
 
 public sealed class AudioCaptureService : IDisposable
 {
+    private static readonly Guid IeeeFloatSubFormat = new("00000003-0000-0010-8000-00AA00389B71");
+    private static readonly Guid PcmSubFormat = new("00000001-0000-0010-8000-00AA00389B71");
+
     private readonly StereoLevelSmoother _smoother = new();
     private readonly AdaptiveStereoCalibration _calibration = new();
+    private readonly SemaphoreSlim _transitionGate = new(1, 1);
     private MMDeviceEnumerator? _enumerator;
     private MMDevice? _device;
-    private WasapiLoopbackCapture? _capture;
+    private WasapiRecorder? _capture;
+    private CaptureDataAvailableHandler? _dataAvailableHandler;
     private StereoSampleEncoding _encoding;
     private double _smoothingFactor;
     private double _silenceThreshold;
     private double _modelMaximumBalance;
     private bool _automaticCalibration;
+    private bool _disposed;
 
     public event EventHandler<DirectionFrame>? FrameAvailable;
 
@@ -27,43 +33,173 @@ public sealed class AudioCaptureService : IDisposable
 
     public string? FormatDescription { get; private set; }
 
-    public void Start(AppSettings settings)
+    public int? ActiveProcessId { get; private set; }
+
+    public string? ProcessCaptureFallbackReason { get; private set; }
+
+    public bool IsProcessCapture => ActiveProcessId.HasValue;
+
+    public async Task StartAsync(
+        AppSettings settings,
+        int? gameProcessId = null,
+        string? gameProcessName = null)
     {
-        Stop();
+        ObjectDisposedException.ThrowIf(_disposed, this);
         settings.Normalize();
 
-        _enumerator = new MMDeviceEnumerator();
-        _device = ResolveDevice(_enumerator, settings.AudioDeviceId);
-        _capture = new WasapiLoopbackCapture(_device);
-
-        if (_capture.WaveFormat.Channels != 2)
+        await _transitionGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            var channels = _capture.WaveFormat.Channels;
-            Stop();
-            throw new NotSupportedException(
-                $"Version 1 supports stereo output only. The selected device reports {channels} channels.");
+            StopCore();
+            ApplyAnalysisSettings(settings);
+            ProcessCaptureFallbackReason = null;
+
+            if (gameProcessId is > 0 && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
+            {
+                try
+                {
+                    await StartProcessCaptureAsync(
+                            gameProcessId.Value,
+                            gameProcessName ?? $"PID {gameProcessId.Value}")
+                        .ConfigureAwait(false);
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    ProcessCaptureFallbackReason = exception.Message;
+                    StopCore();
+                    ApplyAnalysisSettings(settings);
+                }
+            }
+            else if (gameProcessId is > 0)
+            {
+                ProcessCaptureFallbackReason =
+                    "Direct game capture requires Windows 10 version 2004 (build 19041) or newer.";
+            }
+
+            try
+            {
+                StartEndpointCapture(settings.AudioDeviceId);
+            }
+            catch
+            {
+                StopCore();
+                throw;
+            }
+        }
+        finally
+        {
+            _transitionGate.Release();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
         }
 
-        _encoding = ResolveEncoding(_capture.WaveFormat);
+        _disposed = true;
+        _transitionGate.Wait();
+        try
+        {
+            StopCore();
+        }
+        finally
+        {
+            _transitionGate.Release();
+            _transitionGate.Dispose();
+        }
+    }
+
+    [SupportedOSPlatform("windows10.0.19041.0")]
+    private async Task StartProcessCaptureAsync(int processId, string processName)
+    {
+        var capture = await new WasapiRecorderBuilder()
+            .WithProcessLoopback((uint)processId, ProcessLoopbackMode.IncludeTargetProcessTree)
+            .WithFormat(WaveFormat.CreateIeeeFloatWaveFormat(48_000, 2))
+            .BuildAsync()
+            .ConfigureAwait(false);
+
+        ConfigureCapture(
+            capture,
+            $"Game: {processName}",
+            processId);
+    }
+
+    private void StartEndpointCapture(string? requestedDeviceId)
+    {
+        _enumerator = new MMDeviceEnumerator();
+        _device = ResolveDevice(_enumerator, requestedDeviceId);
+        var capture = new WasapiRecorderBuilder()
+            .WithDevice(_device)
+            .WithLoopbackCapture()
+            .Build();
+
+        ConfigureCapture(capture, _device.FriendlyName, processId: null);
+    }
+
+    private void ConfigureCapture(WasapiRecorder capture, string sourceName, int? processId)
+    {
+        if (capture.WaveFormat.Channels != 2)
+        {
+            var channels = capture.WaveFormat.Channels;
+            capture.Dispose();
+            throw new NotSupportedException(
+                $"Version 1 supports stereo input only. The capture source reports {channels} channels.");
+        }
+
+        try
+        {
+            _encoding = ResolveEncoding(capture.WaveFormat);
+        }
+        catch
+        {
+            capture.Dispose();
+            throw;
+        }
+
+        _capture = capture;
+        ActiveDeviceName = sourceName;
+        ActiveProcessId = processId;
+        FormatDescription = capture.WaveFormat.ToString();
+        _smoother.Reset();
+        _calibration.Reset();
+
+        _dataAvailableHandler = (buffer, _, _, _) => HandleDataAvailable(buffer);
+        try
+        {
+            _capture.DataAvailable += _dataAvailableHandler;
+            _capture.RecordingStopped += HandleRecordingStopped;
+            _capture.StartRecording();
+        }
+        catch
+        {
+            StopCore();
+            throw;
+        }
+    }
+
+    private void ApplyAnalysisSettings(AppSettings settings)
+    {
         _smoothingFactor = settings.SmoothingFactor;
         _silenceThreshold = settings.SilenceRmsThreshold;
         _modelMaximumBalance = settings.ModelMaximumBalance;
         _automaticCalibration = settings.AutomaticAudioCalibration;
-        ActiveDeviceName = _device.FriendlyName;
-        FormatDescription = _capture.WaveFormat.ToString();
         _smoother.Reset();
         _calibration.Reset();
-
-        _capture.DataAvailable += HandleDataAvailable;
-        _capture.RecordingStopped += HandleRecordingStopped;
-        _capture.StartRecording();
     }
 
-    public void Stop()
+    private void StopCore()
     {
         if (_capture is not null)
         {
-            _capture.DataAvailable -= HandleDataAvailable;
+            if (_dataAvailableHandler is not null)
+            {
+                _capture.DataAvailable -= _dataAvailableHandler;
+            }
+
             _capture.RecordingStopped -= HandleRecordingStopped;
 
             try
@@ -76,6 +212,7 @@ public sealed class AudioCaptureService : IDisposable
 
             _capture.Dispose();
             _capture = null;
+            _dataAvailableHandler = null;
         }
 
         _device?.Dispose();
@@ -83,21 +220,17 @@ public sealed class AudioCaptureService : IDisposable
         _enumerator?.Dispose();
         _enumerator = null;
         ActiveDeviceName = null;
+        ActiveProcessId = null;
         FormatDescription = null;
         _smoother.Reset();
         _calibration.Reset();
     }
 
-    public void Dispose() => Stop();
-
-    private void HandleDataAvailable(object? sender, WaveInEventArgs eventArgs)
+    private void HandleDataAvailable(ReadOnlySpan<byte> buffer)
     {
         try
         {
-            var levels = StereoRmsAnalyzer.Calculate(
-                eventArgs.Buffer.AsSpan(0, eventArgs.BytesRecorded),
-                2,
-                _encoding);
+            var levels = StereoRmsAnalyzer.Calculate(buffer, 2, _encoding);
             var smoothed = _smoother.Update(levels, _smoothingFactor);
             var calibration = _automaticCalibration
                 ? _calibration.Update(smoothed, _silenceThreshold, _modelMaximumBalance)
@@ -161,18 +294,18 @@ public sealed class AudioCaptureService : IDisposable
 
         if (format is WaveFormatExtensible extensible)
         {
-            if (extensible.SubFormat == AudioMediaSubtypes.MEDIASUBTYPE_IEEE_FLOAT && format.BitsPerSample == 32)
+            if (extensible.SubFormat == IeeeFloatSubFormat && format.BitsPerSample == 32)
             {
                 return StereoSampleEncoding.Float32;
             }
 
-            if (extensible.SubFormat == AudioMediaSubtypes.MEDIASUBTYPE_PCM)
+            if (extensible.SubFormat == PcmSubFormat)
             {
                 return ResolvePcmEncoding(format.BitsPerSample);
             }
         }
 
-        throw new NotSupportedException($"Unsupported loopback sample format: {format}.");
+        throw new NotSupportedException($"Unsupported capture sample format: {format}.");
     }
 
     private static StereoSampleEncoding ResolvePcmEncoding(int bitsPerSample) => bitsPerSample switch

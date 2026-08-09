@@ -42,6 +42,8 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     private bool _isExiting;
     private bool _captureFailureShown;
     private string? _captureFailure;
+    private int _audioCaptureGeneration;
+    private int? _processCaptureFallbackNoticeProcessId;
     private IntPtr _foregroundWindowHook;
 
     public SoundDirectionVisualizerApplicationContext(
@@ -175,8 +177,12 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         }
     }
 
-    private void StartAudioCapture()
+    private async void StartAudioCapture()
     {
+        var generation = ++_audioCaptureGeneration;
+        var settings = _settings.Clone();
+        var preferredGame = settings.PreferDetectedGameAudio ? _detectedGame : null;
+
         lock (_frameGate)
         {
             _latestFrame = null;
@@ -187,11 +193,42 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
 
         try
         {
-            _audioCapture.Start(_settings);
+            await _audioCapture.StartAsync(
+                settings,
+                preferredGame?.ProcessId,
+                preferredGame?.ProcessName);
+
+            if (_isExiting || generation != _audioCaptureGeneration)
+            {
+                return;
+            }
+
             _audioStatusMenuItem.Text = $"Audio: {_audioCapture.ActiveDeviceName}";
+
+            if (_audioCapture.ProcessCaptureFallbackReason is not null
+                && preferredGame is not null
+                && _processCaptureFallbackNoticeProcessId != preferredGame.ProcessId)
+            {
+                _processCaptureFallbackNoticeProcessId = preferredGame.ProcessId;
+                _notifyIcon.ShowBalloonTip(
+                    6000,
+                    "Game audio capture fallback",
+                    $"Direct capture from {preferredGame.ProcessName} was unavailable. " +
+                    "The selected output device is being analyzed instead.",
+                    ToolTipIcon.Warning);
+            }
+            else if (_audioCapture.IsProcessCapture)
+            {
+                _processCaptureFallbackNoticeProcessId = null;
+            }
         }
         catch (Exception exception)
         {
+            if (_isExiting || generation != _audioCaptureGeneration)
+            {
+                return;
+            }
+
             _audioStatusMenuItem.Text = "Audio: unavailable";
             _captureFailureShown = true;
             _notifyIcon.ShowBalloonTip(
@@ -364,9 +401,15 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
             return;
         }
 
-        if (!_settings.AutoDetectSteamGameMonitor)
+        if (!_settings.AutoDetectSteamGameMonitor && !_settings.PreferDetectedGameAudio)
         {
+            var previousProcessId = _detectedGame?.ProcessId;
             _detectedGame = null;
+            if (previousProcessId.HasValue || _audioCapture.IsProcessCapture)
+            {
+                StartAudioCapture();
+            }
+
             ApplyResolvedScreen(DisplayInfoFormatter.ResolveScreen(_settings.SelectedMonitorDeviceName), force);
             return;
         }
@@ -414,13 +457,28 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                     }
                 });
 
-                if (_isExiting || !_settings.AutoDetectSteamGameMonitor)
+                if (_isExiting
+                    || (!_settings.AutoDetectSteamGameMonitor && !_settings.PreferDetectedGameAudio))
                 {
                     return;
                 }
 
+                var previousPreferredProcessId = _settings.PreferDetectedGameAudio
+                    ? _detectedGame?.ProcessId
+                    : null;
                 _detectedGame = detected;
-                ApplyResolvedScreen(detected?.Screen ?? _currentScreen, force);
+                var nextPreferredProcessId = _settings.PreferDetectedGameAudio
+                    ? detected?.ProcessId
+                    : null;
+                if (previousPreferredProcessId != nextPreferredProcessId)
+                {
+                    StartAudioCapture();
+                }
+
+                var resolvedScreen = _settings.AutoDetectSteamGameMonitor
+                    ? detected?.Screen ?? _currentScreen
+                    : DisplayInfoFormatter.ResolveScreen(_settings.SelectedMonitorDeviceName);
+                ApplyResolvedScreen(resolvedScreen, force);
             }
         }
         finally
@@ -520,7 +578,9 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         uint eventThread,
         uint eventTime)
     {
-        if (_isExiting || !_settings.AutoDetectSteamGameMonitor || _uiDispatcher.IsDisposed)
+        if (_isExiting
+            || (!_settings.AutoDetectSteamGameMonitor && !_settings.PreferDetectedGameAudio)
+            || _uiDispatcher.IsDisposed)
         {
             return;
         }
@@ -588,6 +648,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     protected override void ExitThreadCore()
     {
         _isExiting = true;
+        _audioCaptureGeneration++;
         _openSettingsRegistration.Unregister(null);
         _startupSettingsTimer?.Stop();
         if (_startupSettingsTimer is not null)

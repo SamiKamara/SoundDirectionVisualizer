@@ -6,7 +6,7 @@ The first version deliberately supports **stereo output only**. Stereo provides 
 
 ## Current features
 
-- WASAPI loopback capture from the default or a selected Windows output device
+- Automatic process-loopback capture from the detected Steam game, with selected-output WASAPI loopback as a fallback
 - RMS-based stereo direction estimate with automatic output-level and stereo-width calibration
 - Optional manual smoothing, silence-threshold, and hard-pan calibration controls
 - Click-through, always-on-top compass overlay with current rays and a fading history trail
@@ -25,6 +25,8 @@ The first version deliberately supports **stereo output only**. Stereo provides 
 - .NET 9 SDK when running from source
 - A stereo Windows output endpoint for version 1
 
+Direct game-process capture requires Windows 10 version 2004 (build 19041) or newer. On older Windows versions, or if direct activation fails, the application automatically uses the selected stereo output endpoint instead.
+
 ## Run from source
 
 ```powershell
@@ -41,7 +43,7 @@ The settings window opens on the first launch. Closing the settings window leave
 
 All bindings can be changed. A binding can be cleared with Delete, except the required overlay toggle, which falls back to its default if invalid.
 
-Automatic audio calibration is enabled by default. It scales the silence gate down for quiet loopback devices and learns the stereo width actually produced by the selected device and game. Calibration restarts when capture starts or the output device changes. It can be disabled on the Audio tab to use the manual silence-threshold and hard-pan values.
+Direct detected-game audio capture and automatic audio calibration are enabled by default. When a Steam game is detected, its process audio is analyzed before the physical headset endpoint; this preserves L/R information on devices whose output loopback is dual mono after spatial-audio processing. If no game is detected or direct capture is unavailable, the selected Windows output is used automatically. Calibration scales the silence gate down for quiet sources, learns the observed stereo width, and restarts when the capture source changes. Both behaviors can be changed on the Audio tab.
 
 The overlay is enabled by default with a white color, 40% opacity, a size of 110% of the target display height, 3 px line thickness, an 8 px direction marker, zero horizontal and vertical offsets, and a five-second trail. Only the current direction markers and fading direction trail are visible by default; every layer can be enabled independently on the Overlay tab.
 
@@ -69,6 +71,8 @@ With automatic targeting enabled, the application:
 
 If no game is detected, the current/manual display remains selected. Turning automatic targeting off makes the chosen display explicit and persistent.
 
+Game detection is also used by the default audio-capture mode. Audio can continue to follow a detected Steam game while display targeting is manual. The tray menu's disabled `Audio:` row shows whether the active source is `Game: <process>` or a Windows output device.
+
 The overlay works best with borderless-windowed games. Exclusive fullscreen, protected presentation paths, and some anti-cheat environments may prevent third-party topmost windows from appearing.
 
 ## Build, test, and publish
@@ -80,6 +84,14 @@ dotnet test .\SoundDirectionVisualizer.sln --configuration Release
 ```
 
 Publishing creates a self-contained single-file executable under `artifacts\publish\win-x64`.
+
+For a live verification of the same production capture service used by the overlay:
+
+```powershell
+dotnet run --project .\tools\SoundDirectionVisualizer.ProcessAudioProbe\SoundDirectionVisualizer.ProcessAudioProbe.csproj --configuration Release -- <game-process-id> 15
+```
+
+The probe reports the active source and observed L/R balance without writing captured audio to disk.
 
 ## Architecture and project policy
 

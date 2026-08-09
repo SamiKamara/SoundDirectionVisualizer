@@ -24,7 +24,7 @@ Targets plain `net9.0` and has no UI or NAudio dependency.
 
 Targets `net9.0-windows` with WinForms.
 
-- `AudioCaptureService` owns the NAudio WASAPI loopback session and translates NAudio formats into core sample encodings.
+- `AudioCaptureService` prefers NAudio process-loopback capture for the detected game, falls back to selected-endpoint loopback, and translates NAudio formats into core sample encodings.
 - `DirectionOverlayForm` draws the click-through compass, current candidates, and history.
 - `GameWindowMonitor` identifies Steam game windows and their displays.
 - `SoundDirectionVisualizerApplicationContext` coordinates audio, overlay, tray UI, hotkeys, settings, display changes, and app lifetime.
@@ -38,7 +38,8 @@ Exercises direction mapping, silence behavior, sample decoding, stereo-only reje
 
 ```mermaid
 flowchart LR
-  WindowsAudio["Windows output endpoint"] -->|"WASAPI loopback"| Capture["AudioCaptureService"]
+  GameAudio["Detected Steam game process"] -->|"Preferred process loopback"| Capture["AudioCaptureService"]
+  WindowsAudio["Selected Windows output"] -->|"Endpoint fallback"| Capture
   Capture --> Samples["StereoRmsAnalyzer"]
   Samples --> Smooth["StereoLevelSmoother"]
   Smooth --> Estimate["StereoDirectionEstimator"]
@@ -49,6 +50,7 @@ flowchart LR
   Steam["Steam libraries + running windows"] --> Target["GameWindowMonitor"]
   Screens["Windows displays"] --> Target
   Target --> Overlay
+  Target --> Capture
 
   Settings["settings.json"] --> Coordinator["ApplicationContext"]
   Hotkeys["Global hotkeys"] --> Coordinator
@@ -58,7 +60,11 @@ flowchart LR
   Coordinator --> Target
 ```
 
-NAudio invokes `FrameAvailable` on its capture thread. The application context only replaces a locked reference there. A 33 ms WinForms timer transfers the latest immutable frame to the overlay on the UI thread. Painting and trail mutation therefore remain on the UI thread.
+NAudio invokes its data callback on the capture thread, and `AudioCaptureService` raises `FrameAvailable` after analysis on that thread. The application context only replaces a locked reference there. A 33 ms WinForms timer transfers the latest immutable frame to the overlay on the UI thread. Painting and trail mutation therefore remain on the UI thread.
+
+`GameWindowMonitor` includes the detected process ID in its target result. With the default audio preference enabled, a target-process change restarts capture through Windows process loopback at stereo 48 kHz float. If activation is unsupported or fails, `AudioCaptureService` starts the configured endpoint loopback instead and exposes the fallback in status without terminating the overlay. Source transitions reset smoothing and adaptive calibration so state from one game or device is not reused for another.
+
+The application pins `NAudio.Wasapi` `3.0.0-preview.20` because its recorder API provides the Windows process-loopback activation used here. The exact version is intentional; migration to a stable NAudio 3 release should be tested as an explicit dependency change.
 
 ## Overlay window behavior
 
@@ -85,7 +91,7 @@ Automatic targeting follows this priority:
 4. a throttled full process scan;
 5. unchanged current display when nothing is detected.
 
-Foreground changes trigger a refresh through a WinEvent hook. A two-second timer provides recovery from missed events, process startup races, and display changes. Manual cycling disables automatic targeting intentionally.
+Foreground changes trigger a refresh through a WinEvent hook. A two-second timer provides recovery from missed events, process startup races, and display changes. Manual cycling disables automatic display targeting intentionally, while game detection can remain active solely for preferred process-audio capture.
 
 ## Extension points
 

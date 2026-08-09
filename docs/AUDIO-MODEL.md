@@ -2,9 +2,17 @@
 
 ## Scope
 
-Version 1 analyzes exactly two interleaved output channels captured through WASAPI loopback. Supported sample encodings are 32-bit IEEE float and 16/24/32-bit PCM. The application rejects a non-stereo endpoint with a clear error instead of silently reading the first two channels and presenting an incomplete result.
+Version 1 analyzes exactly two interleaved channels. Supported sample encodings are 32-bit IEEE float and 16/24/32-bit PCM. The application rejects a non-stereo capture source with a clear error instead of silently reading the first two channels and presenting an incomplete result.
 
 This is an amplitude-balance visualizer, not source separation, acoustic localization from microphones, or semantic sound recognition.
+
+## Capture source selection
+
+The default source is the audio rendered by the detected Steam game process and its child processes. Windows process-loopback capture is independent of the game's current physical output endpoint and is available on Windows 10 version 2004 (build 19041) and newer. It also excludes unrelated audio such as voice chat, music, and browser playback from the estimate.
+
+If no game is detected, direct activation fails, the Windows version is too old, or the user disables the preference, the selected/default render endpoint is captured through ordinary WASAPI loopback. The fallback preserves the original StereoDirectionVisualizer behavior.
+
+This ordering matters for spatial-audio and Bluetooth endpoints. A physical endpoint's loopback can contain two identical channels even though a later driver, spatial-object renderer, or hardware stage produces directional sound for the listener. No sample-level algorithm can recover direction from two identical channels. Capturing the game process earlier in the Windows render path preserves the stereo information when the game exposes it there. The tray audio status identifies the source actually in use.
 
 ## Level calculation
 
@@ -35,7 +43,7 @@ balance = (R_rms - L_rms) / (R_rms + L_rms)
 
 The original prototype assumed a model in which an apparent hard side used a 20/80 energy split, producing a balance magnitude of `0.60`. The manual `modelMaximumBalance` defaults to `0.50`.
 
-With automatic calibration enabled, the estimator starts with an effective maximum balance of `0.08` and keeps the latest 256 active absolute balance values. Every eight active frames it estimates the output's useful stereo width from the 90th percentile, adds 25% headroom, and gradually moves the effective maximum toward that value. The result is limited to `0.03..modelMaximumBalance`: narrow game/headphone mixes gain useful lateral movement, while tiny channel differences cannot immediately become a hard-side result. Calibration state is reset whenever capture starts or the output device changes.
+With automatic calibration enabled, the estimator starts with an effective maximum balance of `0.08` and keeps the latest 256 active absolute balance values. Every eight active frames it estimates the capture source's useful stereo width from the 90th percentile, adds 25% headroom, and gradually moves the effective maximum toward that value. The result is limited to `0.03..modelMaximumBalance`: narrow game/headphone mixes gain useful lateral movement, while tiny channel differences cannot immediately become a hard-side result. Calibration state is reset whenever capture starts or its source changes.
 
 ```text
 s = clamp(balance / modelMaximumBalance, -1, +1)
@@ -73,6 +81,9 @@ Settings should be tested with a repeatable stereo pan sample before being tuned
 ## Known limitations
 
 - Multiple simultaneous sources are combined into one L/R energy balance.
+- Process capture includes only the detected game process tree; game audio rendered by an unrelated helper process may require endpoint fallback until detection rules are expanded.
+- Direct game capture requires Windows build 19041 or newer and falls back automatically when unavailable.
+- An endpoint-loopback fallback that exposes true dual mono contains no recoverable left/right direction information.
 - Automatic calibration can amplify a narrow L/R energy difference, but cannot recover direction when a binaural mix encodes it only in timing or spectral cues and has equal channel energy.
 - Music, UI sounds, dialogue, reverberation, and game ambience all contribute.
 - Dynamic range compression and per-game mixing affect the estimate.

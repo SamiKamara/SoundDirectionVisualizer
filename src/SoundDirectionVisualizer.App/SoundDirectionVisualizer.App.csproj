@@ -8,7 +8,7 @@
     <ApplicationIcon>Assets\SoundDirectionVisualizerIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="3.0.0-preview.20" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SoundDirectionVisualizer.Core\SoundDirectionVisualizer.Core.csproj" />
