@@ -18,8 +18,11 @@ public sealed class AdaptiveStereoCalibration
     private const double InitialMaximumBalance = 0.08;
     private const double MinimumMaximumBalance = 0.03;
     private const double WidthPercentile = 0.90;
-    private const double WidthHeadroom = 1.25;
+    private const double LearnedSideReferenceDegrees = 75;
     private const double WidthAdjustmentFactor = 0.25;
+
+    private static readonly double WidthHeadroom = 1 / Math.Sin(
+        LearnedSideReferenceDegrees * Math.PI / 180);
 
     private readonly double[] _balanceWindow = new double[BalanceWindowSize];
     private readonly double[] _sortBuffer = new double[BalanceWindowSize];

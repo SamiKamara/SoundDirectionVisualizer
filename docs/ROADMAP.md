@@ -6,7 +6,7 @@ This document records direction, not a release promise. Behavioral work should a
 
 Implemented in the initial project:
 
-- preferred per-process loopback capture for a detected Steam game with selected-endpoint fallback
+- selected/default-endpoint loopback capture with silent-default endpoint discovery and optional detected-game process capture
 - deterministic sample decoding and RMS analysis
 - adjustable smoothing, silence threshold, and balance model
 - explicit front/back ambiguity

@@ -34,18 +34,23 @@ public sealed class AudioCaptureService : IDisposable
 
     public string? ActiveDeviceName { get; private set; }
 
+    public string? ActiveDeviceId { get; private set; }
+
     public string? FormatDescription { get; private set; }
 
     public int? ActiveProcessId { get; private set; }
 
     public string? ProcessCaptureFallbackReason { get; private set; }
 
+    public string? EndpointCaptureFallbackReason { get; private set; }
+
     public bool IsProcessCapture => ActiveProcessId.HasValue;
 
     public async Task StartAsync(
         AppSettings settings,
         int? gameProcessId = null,
-        string? gameProcessName = null)
+        string? gameProcessName = null,
+        string? endpointDeviceIdOverride = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         settings.Normalize();
@@ -56,6 +61,7 @@ public sealed class AudioCaptureService : IDisposable
             StopCore();
             ApplyAnalysisSettings(settings);
             ProcessCaptureFallbackReason = null;
+            EndpointCaptureFallbackReason = null;
 
             if (gameProcessId is > 0 && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
             {
@@ -82,7 +88,22 @@ public sealed class AudioCaptureService : IDisposable
 
             try
             {
-                StartEndpointCapture(settings.AudioDeviceId);
+                StartEndpointCapture(endpointDeviceIdOverride ?? settings.AudioDeviceId);
+            }
+            catch (Exception exception) when (!string.IsNullOrWhiteSpace(endpointDeviceIdOverride))
+            {
+                EndpointCaptureFallbackReason = exception.Message;
+                StopCore();
+                ApplyAnalysisSettings(settings);
+                try
+                {
+                    StartEndpointCapture(settings.AudioDeviceId);
+                }
+                catch
+                {
+                    StopCore();
+                    throw;
+                }
             }
             catch
             {
@@ -128,7 +149,8 @@ public sealed class AudioCaptureService : IDisposable
         ConfigureCapture(
             capture,
             $"Game: {processName}",
-            processId);
+            processId,
+            deviceId: null);
     }
 
     private void StartEndpointCapture(string? requestedDeviceId)
@@ -140,10 +162,14 @@ public sealed class AudioCaptureService : IDisposable
             .WithLoopbackCapture()
             .Build();
 
-        ConfigureCapture(capture, _device.FriendlyName, processId: null);
+        ConfigureCapture(capture, _device.FriendlyName, processId: null, deviceId: _device.ID);
     }
 
-    private void ConfigureCapture(WasapiRecorder capture, string sourceName, int? processId)
+    private void ConfigureCapture(
+        WasapiRecorder capture,
+        string sourceName,
+        int? processId,
+        string? deviceId)
     {
         if (capture.WaveFormat.Channels != 2)
         {
@@ -165,6 +191,7 @@ public sealed class AudioCaptureService : IDisposable
 
         _capture = capture;
         ActiveDeviceName = sourceName;
+        ActiveDeviceId = deviceId;
         ActiveProcessId = processId;
         FormatDescription = capture.WaveFormat.ToString();
         _smoother.Reset();
@@ -227,6 +254,7 @@ public sealed class AudioCaptureService : IDisposable
         _enumerator?.Dispose();
         _enumerator = null;
         ActiveDeviceName = null;
+        ActiveDeviceId = null;
         ActiveProcessId = null;
         FormatDescription = null;
         _smoother.Reset();

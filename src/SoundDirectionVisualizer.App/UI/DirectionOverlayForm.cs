@@ -12,6 +12,8 @@ public sealed class DirectionOverlayForm : Form
     private readonly DirectionTrail _trail = new();
     private AppSettings _settings = new();
     private Color _overlayBaseColor = Color.FromArgb(70, 230, 255);
+    private Color _ambientMarkerBaseColor = Color.FromArgb(70, 230, 255);
+    private Color _loudMarkerBaseColor = Color.FromArgb(70, 230, 255);
     private Color _loudMarkerOutlineBaseColor = Color.Black;
     private Screen _targetScreen = Screen.PrimaryScreen ?? Screen.AllScreens.First();
     private DirectionFrame? _currentFrame;
@@ -58,6 +60,8 @@ public sealed class DirectionOverlayForm : Form
         _settings = settings.Clone();
         _settings.Normalize();
         _overlayBaseColor = _settings.GetOverlayColor();
+        _ambientMarkerBaseColor = _settings.GetAmbientMarkerColor();
+        _loudMarkerBaseColor = _settings.GetLoudMarkerColor();
         _loudMarkerOutlineBaseColor = _settings.GetLoudMarkerOutlineColor();
         Opacity = _settings.OverlayOpacityPercent / 100d;
         _trail.Clear();
@@ -129,27 +133,59 @@ public sealed class DirectionOverlayForm : Form
             }
         }
 
+        var current = _currentFrame is { Estimate.IsQuiet: false } activeFrame
+            ? activeFrame
+            : null;
+
         if (_settings.ShowDirectionTrail)
         {
-            DrawTrail(graphics, center, metrics, DateTimeOffset.UtcNow);
+            DrawTrailLayer(
+                graphics,
+                center,
+                metrics,
+                DateTimeOffset.UtcNow,
+                SoundLoudness.Ambient);
         }
 
-        if (_currentFrame is { Estimate.IsQuiet: false } current)
+        if (current is not null && _settings.ShowCurrentDirectionRays)
         {
-            if (_settings.ShowCurrentDirectionRays)
-            {
-                DrawCurrentDirectionRays(graphics, center, metrics, current.Estimate.CandidateAzimuths);
-            }
+            DrawCurrentDirectionRays(graphics, center, metrics, current.Estimate.CandidateAzimuths);
+        }
 
-            if (_settings.ShowCurrentDirectionMarkers)
-            {
-                DrawCurrentDirectionMarkers(
-                    graphics,
-                    center,
-                    metrics,
-                    current.Estimate.CandidateAzimuths,
-                    current.Loudness);
-            }
+        if (current is not null
+            && _settings.ShowCurrentDirectionMarkers
+            && GetEffectiveLoudness(current.Loudness) == SoundLoudness.Ambient)
+        {
+            DrawCurrentDirectionMarkers(
+                graphics,
+                center,
+                metrics,
+                current.Estimate.CandidateAzimuths,
+                current.Loudness);
+        }
+
+        // Loud markers are a separate top layer so neither a newer ambient trail point
+        // nor an ambient current marker can obscure a loud marker at the same position.
+        if (_settings.ShowDirectionTrail)
+        {
+            DrawTrailLayer(
+                graphics,
+                center,
+                metrics,
+                DateTimeOffset.UtcNow,
+                SoundLoudness.Loud);
+        }
+
+        if (current is not null
+            && _settings.ShowCurrentDirectionMarkers
+            && GetEffectiveLoudness(current.Loudness) == SoundLoudness.Loud)
+        {
+            DrawCurrentDirectionMarkers(
+                graphics,
+                center,
+                metrics,
+                current.Estimate.CandidateAzimuths,
+                current.Loudness);
         }
 
         if (_settings.ShowListenerDot)
@@ -181,16 +217,22 @@ public sealed class DirectionOverlayForm : Form
         base.WndProc(ref message);
     }
 
-    private void DrawTrail(
+    private void DrawTrailLayer(
         Graphics graphics,
         PointF center,
         OverlayMetrics metrics,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        SoundLoudness layer)
     {
         var maximumAge = Math.Max(0.1, _settings.TrailDurationSeconds);
 
         foreach (var point in _trail.Points)
         {
+            if (GetEffectiveLoudness(point.Loudness) != layer)
+            {
+                continue;
+            }
+
             var age = (now - point.Timestamp).TotalSeconds;
             var freshness = Math.Clamp(1 - age / maximumAge, 0, 1);
             if (freshness < 0.04)
@@ -245,10 +287,16 @@ public sealed class DirectionOverlayForm : Form
         SoundLoudness loudness) => DirectionMarkerVisualCalculator.Calculate(
             metrics.MarkerSize,
             freshness,
-            _settings.LoudSoundEmphasisEnabled ? loudness : SoundLoudness.Ambient,
+            GetEffectiveLoudness(loudness),
+            _settings.AmbientMarkerSizePercent,
             _settings.AmbientMarkerOpacityPercent,
             _settings.LoudMarkerSizePercent,
             _settings.LoudMarkerOpacityPercent);
+
+    private SoundLoudness GetEffectiveLoudness(SoundLoudness loudness) =>
+        _settings.LoudSoundEmphasisEnabled
+            ? loudness
+            : SoundLoudness.Ambient;
 
     private void DrawDirectionMarker(
         Graphics graphics,
@@ -256,7 +304,10 @@ public sealed class DirectionOverlayForm : Form
         OverlayMetrics metrics,
         DirectionMarkerVisual visual)
     {
-        var fillColor = FadedOverlayColor(visual.Intensity);
+        var markerBaseColor = visual.IsEmphasized
+            ? _loudMarkerBaseColor
+            : _ambientMarkerBaseColor;
+        var fillColor = FadedColor(markerBaseColor, visual.Intensity);
         using var markerBrush = new SolidBrush(fillColor);
         graphics.FillEllipse(
             markerBrush,
@@ -273,9 +324,9 @@ public sealed class DirectionOverlayForm : Form
         var displayScale = metrics.MarkerSize / Math.Max(1, _settings.MarkerSize);
         var outlineThickness = Math.Clamp(
             _settings.LoudMarkerOutlineThickness * displayScale,
-            1,
-            Math.Max(1, visual.Size / 3));
-        using var outlinePen = new Pen(_loudMarkerOutlineBaseColor, outlineThickness);
+            0.1,
+            Math.Max(0.1, visual.Size / 3));
+        using var outlinePen = new Pen(_loudMarkerOutlineBaseColor, (float)outlineThickness);
         graphics.DrawEllipse(
             outlinePen,
             position.X - visual.Size / 2,
@@ -329,11 +380,11 @@ public sealed class DirectionOverlayForm : Form
         _overlayBaseColor.G,
         _overlayBaseColor.B);
 
-    private Color FadedOverlayColor(double intensity) => Color.FromArgb(
+    private static Color FadedColor(Color baseColor, double intensity) => Color.FromArgb(
         255,
-        (int)Math.Round(_overlayBaseColor.R * Math.Clamp(intensity, 0, 1)),
-        (int)Math.Round(_overlayBaseColor.G * Math.Clamp(intensity, 0, 1)),
-        (int)Math.Round(_overlayBaseColor.B * Math.Clamp(intensity, 0, 1)));
+        (int)Math.Round(baseColor.R * Math.Clamp(intensity, 0, 1)),
+        (int)Math.Round(baseColor.G * Math.Clamp(intensity, 0, 1)),
+        (int)Math.Round(baseColor.B * Math.Clamp(intensity, 0, 1)));
 
     private OverlayMetrics GetMetrics() => OverlayMetrics.FitToDisplayHeight(
         _settings.RingThickness,

@@ -4,9 +4,9 @@ public sealed class SettingsForm : Form
 {
     private readonly CheckBox _overlayEnabled = new() { Text = "Enable overlay", AutoSize = true };
     private readonly ComboBox _audioDevice = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
-    private readonly CheckBox _preferDetectedGameAudio = new()
+    private readonly CheckBox _useDetectedGameProcessAudio = new()
     {
-        Text = "Prefer audio captured directly from the detected Steam game (recommended)",
+        Text = "Capture only the detected Steam game's process audio (optional)",
         AutoSize = true
     };
     private readonly CheckBox _automaticAudioCalibration = new()
@@ -24,11 +24,14 @@ public sealed class SettingsForm : Form
     private readonly NumericUpDown _scale = CreateIntegerNumeric(10, 200, 5);
     private readonly NumericUpDown _thickness = CreateIntegerNumeric(1, 12);
     private readonly NumericUpDown _markerSize = CreateIntegerNumeric(4, 32);
-    private readonly NumericUpDown _ambientMarkerOpacity = CreateIntegerNumeric(10, 100, 5);
-    private readonly NumericUpDown _loudMarkerSize = CreateIntegerNumeric(100, 300, 5);
-    private readonly NumericUpDown _loudMarkerOpacity = CreateIntegerNumeric(10, 100, 5);
+    private readonly NumericUpDown _ambientMarkerSize = CreateIntegerNumeric(25, 300, 5);
+    private readonly TrackBar _ambientMarkerOpacity = CreatePercentageSlider(10);
+    private readonly Label _ambientMarkerOpacityValue = new() { Text = "40%", AutoSize = true };
+    private readonly NumericUpDown _loudMarkerSize = CreateIntegerNumeric(25, 300, 5);
+    private readonly TrackBar _loudMarkerOpacity = CreatePercentageSlider(10);
+    private readonly Label _loudMarkerOpacityValue = new() { Text = "100%", AutoSize = true };
     private readonly CheckBox _loudMarkerOutline = new() { Text = "Outline loud markers", AutoSize = true };
-    private readonly NumericUpDown _loudMarkerOutlineThickness = CreateIntegerNumeric(1, 8);
+    private readonly NumericUpDown _loudMarkerOutlineThickness = CreateDecimalNumeric(0.1m, 8m, 1, 0.1m);
     private readonly TrackBar _opacitySlider = new()
     {
         Minimum = 0,
@@ -53,12 +56,18 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _showLabels = new() { Text = "Show F / B / L / R labels", AutoSize = true };
     private readonly Button _colorButton = new() { Text = "Choose...", AutoSize = true };
     private readonly Panel _colorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
+    private readonly Button _ambientMarkerColorButton = new() { Text = "Choose...", AutoSize = true };
+    private readonly Panel _ambientMarkerColorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
+    private readonly Button _loudMarkerColorButton = new() { Text = "Choose...", AutoSize = true };
+    private readonly Panel _loudMarkerColorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
     private readonly Button _loudOutlineColorButton = new() { Text = "Choose...", AutoSize = true };
     private readonly Panel _loudOutlineColorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
     private readonly HotkeyTextBox _toggleHotkey = new() { Dock = DockStyle.Fill };
     private readonly HotkeyTextBox _cycleHotkey = new() { Dock = DockStyle.Fill };
     private readonly HotkeyTextBox _openSettingsHotkey = new() { Dock = DockStyle.Fill };
     private string _selectedColorHex = "#FFFFFF";
+    private string _selectedAmbientMarkerColorHex = "#FFFFFF";
+    private string _selectedLoudMarkerColorHex = "#FFFFFF";
     private string _selectedLoudOutlineColorHex = "#000000";
     private bool _isLoading = true;
 
@@ -117,6 +126,8 @@ public sealed class SettingsForm : Form
             NotifyOverlayPreviewChanged();
         };
         _colorButton.Click += (_, _) => ChooseColor();
+        _ambientMarkerColorButton.Click += (_, _) => ChooseAmbientMarkerColor();
+        _loudMarkerColorButton.Click += (_, _) => ChooseLoudMarkerColor();
         _loudOutlineColorButton.Click += (_, _) => ChooseLoudOutlineColor();
 
         foreach (var numeric in new[]
@@ -124,9 +135,8 @@ public sealed class SettingsForm : Form
                      _scale,
                      _thickness,
                      _markerSize,
-                     _ambientMarkerOpacity,
+                     _ambientMarkerSize,
                      _loudMarkerSize,
-                     _loudMarkerOpacity,
                      _loudMarkerOutlineThickness,
                      _horizontalOffset,
                      _verticalOffset,
@@ -135,6 +145,9 @@ public sealed class SettingsForm : Form
         {
             numeric.ValueChanged += (_, _) => NotifyOverlayPreviewChanged();
         }
+
+        BindPercentageSlider(_ambientMarkerOpacity, _ambientMarkerOpacityValue);
+        BindPercentageSlider(_loudMarkerOpacity, _loudMarkerOpacityValue);
 
         _overlayEnabled.CheckedChanged += (_, _) => NotifyOverlayPreviewChanged();
         foreach (var toggle in new[]
@@ -161,7 +174,7 @@ public sealed class SettingsForm : Form
     {
         var page = CreateTab("Audio");
         var layout = CreateTwoColumnTable();
-        AddWideRow(layout, _preferDetectedGameAudio);
+        AddWideRow(layout, _useDetectedGameProcessAudio);
         AddRow(layout, "Output device", _audioDevice);
         AddWideRow(layout, _automaticAudioCalibration);
         AddRow(layout, "Silence threshold (RMS)", _silenceThreshold);
@@ -170,11 +183,11 @@ public sealed class SettingsForm : Form
         AddWideRow(layout, _loudSoundEmphasis);
         AddRow(layout, "Loud sound threshold (× ambience)", _loudSoundThreshold);
         AddWideRow(layout, CreateNote(
-            "By default, audio is captured directly from the detected Steam game process. This preserves stereo direction when a headset " +
-            "or spatial-audio driver exposes only dual mono at its physical output loopback. The selected output device is used as a fallback " +
-            "and whenever direct game capture is disabled or no game is detected. Both modes require exactly two channels."));
+            "By default, audio is captured from the selected Windows output device. If the default device stays silent, the app occasionally " +
+            "checks other active stereo output devices and temporarily follows one carrying audio. Optional game-process capture can preserve " +
+            "stereo direction when a headset or spatial-audio driver exposes only dual mono at its physical output loopback. Both modes require exactly two channels."));
         AddWideRow(layout, CreateNote(
-            "Automatic calibration scales the silence gate, learns the usual stereo width, and adds immediate headroom for wider transient sounds. " +
+            "Automatic calibration scales the silence gate, normalizes each source's usual stereo width toward a consistent lateral angle, and adds immediate headroom for wider transient sounds. " +
             "Disable it only when using the manual silence threshold and hard-pan balance values."));
         AddWideRow(layout, CreateNote(
             "Loud-sound detection compares the current combined level with the median recent ambience. " +
@@ -194,7 +207,7 @@ public sealed class SettingsForm : Form
         var colorPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
         colorPanel.Controls.Add(_colorPreview);
         colorPanel.Controls.Add(_colorButton);
-        AddRow(layout, "Color", colorPanel);
+        AddRow(layout, "Compass / ray / label color", colorPanel);
 
         var opacityPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
         opacityPanel.Controls.Add(_opacitySlider);
@@ -202,32 +215,18 @@ public sealed class SettingsForm : Form
         AddRow(layout, "Opacity", opacityPanel);
         AddRow(layout, "Size (% of display height)", _scale);
         AddRow(layout, "Line thickness (px)", _thickness);
-        AddRow(layout, "Direction marker (px)", _markerSize);
+        AddRow(layout, "Base marker size (px)", _markerSize);
         AddRow(layout, "Horizontal offset (px)", _horizontalOffset);
         AddRow(layout, "Vertical offset (px)", _verticalOffset);
         AddWideRow(layout, CreateNote(
             "The default size is 110% of the target display height. " +
             "Size changes the ring, lines, markers, and labels together. " +
             "Offsets are relative to the target display center; positive Y moves the visualizer down. Changes are previewed live."));
-        AddWideRow(layout, new Label
-        {
-            Text = "Sound marker emphasis",
-            AutoSize = true,
-            Font = new Font(Font, FontStyle.Bold)
-        });
-        AddRow(layout, "Ambient marker opacity (%)", _ambientMarkerOpacity);
-        AddRow(layout, "Loud marker size (%)", _loudMarkerSize);
-        AddRow(layout, "Loud marker opacity (%)", _loudMarkerOpacity);
-        AddWideRow(layout, _loudMarkerOutline);
-
-        var loudOutlineColorPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        loudOutlineColorPanel.Controls.Add(_loudOutlineColorPreview);
-        loudOutlineColorPanel.Controls.Add(_loudOutlineColorButton);
-        AddRow(layout, "Loud outline color", loudOutlineColorPanel);
-        AddRow(layout, "Loud outline thickness (px)", _loudMarkerOutlineThickness);
+        AddWideRow(layout, BuildAmbientMarkerGroup());
+        AddWideRow(layout, BuildLoudMarkerGroup());
         AddWideRow(layout, CreateNote(
-            "An ambient spawn marker starts at the same size as a fresh trail point. Loud spawn and trail markers use the larger size, " +
-            "stronger visual opacity, and optional outline configured above. Marker opacity is relative to the overlay's global opacity."));
+            "Size is relative to the base marker size. The same type-specific appearance is used by current and trail markers; " +
+            "trail age still shrinks and fades both types. Marker opacity is relative to the overlay's global opacity."));
         AddWideRow(layout, new Label
         {
             Text = "Visible elements",
@@ -259,6 +258,46 @@ public sealed class SettingsForm : Form
             "The overlay is intended for borderless-windowed games. Exclusive fullscreen and some anti-cheat/protected overlays can block it."));
         page.Controls.Add(layout);
         return page;
+    }
+
+    private GroupBox BuildAmbientMarkerGroup()
+    {
+        var group = CreateSettingsGroup("Ambient markers");
+        var layout = CreateTwoColumnTable();
+        AddRow(layout, "Size (% of base)", _ambientMarkerSize);
+        AddRow(
+            layout,
+            "Opacity",
+            CreatePercentageSliderPanel(_ambientMarkerOpacity, _ambientMarkerOpacityValue));
+        AddRow(
+            layout,
+            "Fill color",
+            CreateColorPanel(_ambientMarkerColorPreview, _ambientMarkerColorButton));
+        group.Controls.Add(layout);
+        return group;
+    }
+
+    private GroupBox BuildLoudMarkerGroup()
+    {
+        var group = CreateSettingsGroup("Loud markers");
+        var layout = CreateTwoColumnTable();
+        AddRow(layout, "Size (% of base)", _loudMarkerSize);
+        AddRow(
+            layout,
+            "Opacity",
+            CreatePercentageSliderPanel(_loudMarkerOpacity, _loudMarkerOpacityValue));
+        AddRow(
+            layout,
+            "Fill color",
+            CreateColorPanel(_loudMarkerColorPreview, _loudMarkerColorButton));
+        AddWideRow(layout, _loudMarkerOutline);
+        AddRow(
+            layout,
+            "Outline color",
+            CreateColorPanel(_loudOutlineColorPreview, _loudOutlineColorButton));
+        AddRow(layout, "Outline thickness (px)", _loudMarkerOutlineThickness);
+        group.Controls.Add(layout);
+        return group;
     }
 
     private TabPage BuildHotkeysTab()
@@ -320,7 +359,7 @@ public sealed class SettingsForm : Form
             ?? _monitor.Items.Cast<DisplayOption>().FirstOrDefault();
 
         _overlayEnabled.Checked = settings.OverlayEnabled;
-        _preferDetectedGameAudio.Checked = settings.PreferDetectedGameAudio;
+        _useDetectedGameProcessAudio.Checked = settings.UseDetectedGameProcessAudio;
         _automaticAudioCalibration.Checked = settings.AutomaticAudioCalibration;
         _silenceThreshold.Value = (decimal)settings.SilenceRmsThreshold;
         _smoothing.Value = (decimal)settings.SmoothingFactor;
@@ -336,13 +375,20 @@ public sealed class SettingsForm : Form
         _scale.Value = settings.OverlayHeightPercent;
         _thickness.Value = settings.RingThickness;
         _markerSize.Value = settings.MarkerSize;
+        _ambientMarkerSize.Value = settings.AmbientMarkerSizePercent;
         _ambientMarkerOpacity.Value = settings.AmbientMarkerOpacityPercent;
+        _ambientMarkerOpacityValue.Text = $"{settings.AmbientMarkerOpacityPercent}%";
+        _selectedAmbientMarkerColorHex = settings.AmbientMarkerColorHex;
+        _ambientMarkerColorPreview.BackColor = settings.GetAmbientMarkerColor();
         _loudMarkerSize.Value = settings.LoudMarkerSizePercent;
         _loudMarkerOpacity.Value = settings.LoudMarkerOpacityPercent;
+        _loudMarkerOpacityValue.Text = $"{settings.LoudMarkerOpacityPercent}%";
+        _selectedLoudMarkerColorHex = settings.LoudMarkerColorHex;
+        _loudMarkerColorPreview.BackColor = settings.GetLoudMarkerColor();
         _loudMarkerOutline.Checked = settings.LoudMarkerOutlineEnabled;
         _selectedLoudOutlineColorHex = settings.LoudMarkerOutlineColorHex;
         _loudOutlineColorPreview.BackColor = settings.GetLoudMarkerOutlineColor();
-        _loudMarkerOutlineThickness.Value = settings.LoudMarkerOutlineThickness;
+        _loudMarkerOutlineThickness.Value = (decimal)settings.LoudMarkerOutlineThickness;
         UpdateLoudSoundControls();
         _horizontalOffset.Value = settings.HorizontalOffset;
         _verticalOffset.Value = settings.VerticalOffset;
@@ -397,6 +443,42 @@ public sealed class SettingsForm : Form
         NotifyOverlayPreviewChanged();
     }
 
+    private void ChooseAmbientMarkerColor()
+    {
+        using var dialog = new ColorDialog
+        {
+            Color = ColorTranslator.FromHtml(_selectedAmbientMarkerColorHex),
+            FullOpen = true
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        _selectedAmbientMarkerColorHex = ToColorHex(dialog.Color);
+        _ambientMarkerColorPreview.BackColor = dialog.Color;
+        NotifyOverlayPreviewChanged();
+    }
+
+    private void ChooseLoudMarkerColor()
+    {
+        using var dialog = new ColorDialog
+        {
+            Color = ColorTranslator.FromHtml(_selectedLoudMarkerColorHex),
+            FullOpen = true
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        _selectedLoudMarkerColorHex = ToColorHex(dialog.Color);
+        _loudMarkerColorPreview.BackColor = dialog.Color;
+        NotifyOverlayPreviewChanged();
+    }
+
     private void SaveAndClose()
     {
         ResultSettings = ReadSettingsFromControls();
@@ -413,7 +495,7 @@ public sealed class SettingsForm : Form
         {
             OverlayEnabled = _overlayEnabled.Checked,
             AudioDeviceId = selectedEndpoint?.Id,
-            PreferDetectedGameAudio = _preferDetectedGameAudio.Checked,
+            UseDetectedGameProcessAudio = _useDetectedGameProcessAudio.Checked,
             AutomaticAudioCalibration = _automaticAudioCalibration.Checked,
             SilenceRmsThreshold = (double)_silenceThreshold.Value,
             SmoothingFactor = (double)_smoothing.Value,
@@ -427,12 +509,15 @@ public sealed class SettingsForm : Form
             OverlayHeightPercent = (int)_scale.Value,
             RingThickness = (int)_thickness.Value,
             MarkerSize = (int)_markerSize.Value,
-            AmbientMarkerOpacityPercent = (int)_ambientMarkerOpacity.Value,
+            AmbientMarkerSizePercent = (int)_ambientMarkerSize.Value,
+            AmbientMarkerOpacityPercent = _ambientMarkerOpacity.Value,
+            AmbientMarkerColorHex = _selectedAmbientMarkerColorHex,
             LoudMarkerSizePercent = (int)_loudMarkerSize.Value,
-            LoudMarkerOpacityPercent = (int)_loudMarkerOpacity.Value,
+            LoudMarkerOpacityPercent = _loudMarkerOpacity.Value,
+            LoudMarkerColorHex = _selectedLoudMarkerColorHex,
             LoudMarkerOutlineEnabled = _loudMarkerOutline.Checked,
             LoudMarkerOutlineColorHex = _selectedLoudOutlineColorHex,
-            LoudMarkerOutlineThickness = (int)_loudMarkerOutlineThickness.Value,
+            LoudMarkerOutlineThickness = (double)_loudMarkerOutlineThickness.Value,
             HorizontalOffset = (int)_horizontalOffset.Value,
             VerticalOffset = (int)_verticalOffset.Value,
             ShowCompassRing = _showRing.Checked,
@@ -482,6 +567,9 @@ public sealed class SettingsForm : Form
         _loudSoundThreshold.Enabled = enabled;
         _loudMarkerSize.Enabled = enabled;
         _loudMarkerOpacity.Enabled = enabled;
+        _loudMarkerOpacityValue.Enabled = enabled;
+        _loudMarkerColorButton.Enabled = enabled;
+        _loudMarkerColorPreview.Enabled = enabled;
         _loudMarkerOutline.Enabled = enabled;
         UpdateLoudMarkerOutlineControls();
     }
@@ -538,6 +626,54 @@ public sealed class SettingsForm : Form
         MaximumSize = new Size(590, 0),
         ForeColor = SystemColors.GrayText
     };
+
+    private static GroupBox CreateSettingsGroup(string text) => new()
+    {
+        Text = text,
+        AutoSize = true,
+        Dock = DockStyle.Top,
+        Padding = new Padding(8)
+    };
+
+    private static FlowLayoutPanel CreateColorPanel(Panel preview, Button button)
+    {
+        var panel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        panel.Controls.Add(preview);
+        panel.Controls.Add(button);
+        return panel;
+    }
+
+    private static FlowLayoutPanel CreatePercentageSliderPanel(TrackBar slider, Label valueLabel)
+    {
+        var panel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        valueLabel.Margin = new Padding(3, 8, 3, 3);
+        panel.Controls.Add(slider);
+        panel.Controls.Add(valueLabel);
+        return panel;
+    }
+
+    private void BindPercentageSlider(TrackBar slider, Label valueLabel)
+    {
+        slider.ValueChanged += (_, _) =>
+        {
+            valueLabel.Text = $"{slider.Value}%";
+            NotifyOverlayPreviewChanged();
+        };
+    }
+
+    private static TrackBar CreatePercentageSlider(int minimum) => new()
+    {
+        Minimum = minimum,
+        Maximum = 100,
+        TickFrequency = 10,
+        SmallChange = 1,
+        LargeChange = 10,
+        AutoSize = false,
+        Width = 230,
+        Height = 34
+    };
+
+    private static string ToColorHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 
     private static NumericUpDown CreateIntegerNumeric(
         int minimum,

@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Text.Json.Serialization;
 
 namespace SoundDirectionVisualizer.App;
 
@@ -8,7 +9,11 @@ public sealed class AppSettings
 
     public string? AudioDeviceId { get; set; }
 
-    public bool PreferDetectedGameAudio { get; set; } = true;
+    public bool UseDetectedGameProcessAudio { get; set; }
+
+    [JsonPropertyName("PreferDetectedGameAudio")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LegacyPreferDetectedGameAudio { get; set; }
 
     public bool AutomaticAudioCalibration { get; set; } = true;
 
@@ -36,17 +41,23 @@ public sealed class AppSettings
 
     public int MarkerSize { get; set; } = 8;
 
-    public int AmbientMarkerOpacityPercent { get; set; } = 70;
+    public int AmbientMarkerSizePercent { get; set; } = 60;
 
-    public int LoudMarkerSizePercent { get; set; } = 150;
+    public int AmbientMarkerOpacityPercent { get; set; } = 40;
+
+    public string AmbientMarkerColorHex { get; set; } = "";
+
+    public int LoudMarkerSizePercent { get; set; } = 160;
 
     public int LoudMarkerOpacityPercent { get; set; } = 100;
+
+    public string LoudMarkerColorHex { get; set; } = "";
 
     public bool LoudMarkerOutlineEnabled { get; set; } = true;
 
     public string LoudMarkerOutlineColorHex { get; set; } = "#000000";
 
-    public int LoudMarkerOutlineThickness { get; set; } = 2;
+    public double LoudMarkerOutlineThickness { get; set; } = 0.8;
 
     public int HorizontalOffset { get; set; }
 
@@ -80,7 +91,7 @@ public sealed class AppSettings
         {
             OverlayEnabled = OverlayEnabled,
             AudioDeviceId = AudioDeviceId,
-            PreferDetectedGameAudio = PreferDetectedGameAudio,
+            UseDetectedGameProcessAudio = UseDetectedGameProcessAudio,
             AutomaticAudioCalibration = AutomaticAudioCalibration,
             SilenceRmsThreshold = SilenceRmsThreshold,
             SmoothingFactor = SmoothingFactor,
@@ -94,9 +105,12 @@ public sealed class AppSettings
             OverlayHeightPercent = OverlayHeightPercent,
             RingThickness = RingThickness,
             MarkerSize = MarkerSize,
+            AmbientMarkerSizePercent = AmbientMarkerSizePercent,
             AmbientMarkerOpacityPercent = AmbientMarkerOpacityPercent,
+            AmbientMarkerColorHex = AmbientMarkerColorHex,
             LoudMarkerSizePercent = LoudMarkerSizePercent,
             LoudMarkerOpacityPercent = LoudMarkerOpacityPercent,
+            LoudMarkerColorHex = LoudMarkerColorHex,
             LoudMarkerOutlineEnabled = LoudMarkerOutlineEnabled,
             LoudMarkerOutlineColorHex = LoudMarkerOutlineColorHex,
             LoudMarkerOutlineThickness = LoudMarkerOutlineThickness,
@@ -118,6 +132,9 @@ public sealed class AppSettings
 
     public void Normalize()
     {
+        // Process capture used to be enabled by default. The replacement setting has a
+        // new JSON name so existing installations return to endpoint capture once.
+        LegacyPreferDetectedGameAudio = false;
         SilenceRmsThreshold = Math.Clamp(SilenceRmsThreshold, 0.00001, 0.1);
         SmoothingFactor = Math.Clamp(SmoothingFactor, 0.01, 1);
         ModelMaximumBalance = Math.Clamp(ModelMaximumBalance, 0.05, 1);
@@ -141,11 +158,18 @@ public sealed class AppSettings
         OverlayHeightPercent = Math.Clamp(OverlayHeightPercent, 10, 200);
         RingThickness = Math.Clamp(RingThickness, 1, 12);
         MarkerSize = Math.Clamp(MarkerSize, 4, 32);
+        OverlayColorHex = NormalizeColorHex(OverlayColorHex, "#FFFFFF");
+        AmbientMarkerSizePercent = Math.Clamp(AmbientMarkerSizePercent, 25, 300);
         AmbientMarkerOpacityPercent = Math.Clamp(AmbientMarkerOpacityPercent, 10, 100);
-        LoudMarkerSizePercent = Math.Clamp(LoudMarkerSizePercent, 100, 300);
+        AmbientMarkerColorHex = NormalizeColorHex(AmbientMarkerColorHex, OverlayColorHex);
+        LoudMarkerSizePercent = Math.Clamp(LoudMarkerSizePercent, 25, 300);
         LoudMarkerOpacityPercent = Math.Clamp(LoudMarkerOpacityPercent, 10, 100);
+        LoudMarkerColorHex = NormalizeColorHex(LoudMarkerColorHex, OverlayColorHex);
         LoudMarkerOutlineColorHex = NormalizeColorHex(LoudMarkerOutlineColorHex, "#000000");
-        LoudMarkerOutlineThickness = Math.Clamp(LoudMarkerOutlineThickness, 1, 8);
+        LoudMarkerOutlineThickness = Math.Round(
+            Math.Clamp(LoudMarkerOutlineThickness, 0.1, 8),
+            1,
+            MidpointRounding.AwayFromZero);
         HorizontalOffset = Math.Clamp(HorizontalOffset, -4000, 4000);
         VerticalOffset = Math.Clamp(VerticalOffset, -4000, 4000);
         TrailDurationSeconds = Math.Clamp(TrailDurationSeconds, 0.5, 15);
@@ -168,15 +192,6 @@ public sealed class AppSettings
         {
             OpenSettingsHotkey = HotkeyDefinition.DefaultOpenSettings();
         }
-
-        try
-        {
-            _ = ColorTranslator.FromHtml(OverlayColorHex);
-        }
-        catch
-        {
-            OverlayColorHex = "#FFFFFF";
-        }
     }
 
     public Color GetOverlayColor()
@@ -196,6 +211,18 @@ public sealed class AppSettings
         {
             return Color.Black;
         }
+    }
+
+    public Color GetAmbientMarkerColor()
+    {
+        Normalize();
+        return ColorTranslator.FromHtml(AmbientMarkerColorHex);
+    }
+
+    public Color GetLoudMarkerColor()
+    {
+        Normalize();
+        return ColorTranslator.FromHtml(LoudMarkerColorHex);
     }
 
     private static string NormalizeColorHex(string? colorHex, string fallback)

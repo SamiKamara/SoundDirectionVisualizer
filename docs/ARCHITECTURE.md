@@ -25,7 +25,7 @@ Targets plain `net9.0` and has no UI or NAudio dependency.
 
 Targets `net9.0-windows` with WinForms.
 
-- `AudioCaptureService` prefers NAudio process-loopback capture for the detected game, falls back to selected-endpoint loopback, and translates NAudio formats into core sample encodings.
+- `AudioCaptureService` normally uses selected/default-endpoint loopback, optionally attempts detected-game process loopback, and translates NAudio formats into core sample encodings.
 - `DirectionOverlayForm` draws the click-through compass, current candidates, and history.
 - `GameWindowMonitor` identifies Steam game windows and their displays, including processes whose full module metadata is restricted by anti-cheat software.
 - `GameAudioProcessResolver` selects an active audio-session process from the detected Steam game's installation directory when launcher, anti-cheat, and game audio use different processes.
@@ -40,8 +40,9 @@ Exercises direction mapping, silence behavior, sample decoding, stereo-only reje
 
 ```mermaid
 flowchart LR
-  GameAudio["Detected Steam game process"] -->|"Preferred process loopback"| Capture["AudioCaptureService"]
-  WindowsAudio["Selected Windows output"] -->|"Endpoint fallback"| Capture
+  GameAudio["Detected Steam game process"] -->|"Optional process loopback"| Capture["AudioCaptureService"]
+  WindowsAudio["Selected/default Windows output"] -->|"Default endpoint loopback"| Capture
+  OtherAudio["Other active stereo outputs"] -->|"Silent-default peak probe"| Capture
   Capture --> Samples["StereoRmsAnalyzer"]
   Samples --> Smooth["StereoLevelSmoother"]
   Smooth --> Estimate["StereoDirectionEstimator"]
@@ -66,7 +67,9 @@ NAudio invokes its data callback on the capture thread, and `AudioCaptureService
 
 `GameWindowMonitor` includes the detected process ID, executable path, and Steam game installation directory in its target result. Executable paths are queried with `PROCESS_QUERY_LIMITED_INFORMATION` before falling back to managed `Process.MainModule`; this permits normal path verification for protected processes such as DayZ's BattlEye-launched game process without bypassing or modifying anti-cheat behavior.
 
-With the default audio preference enabled, `GameAudioProcessResolver` enumerates active render-endpoint sessions and selects the strongest active session whose executable remains inside that same game installation. It falls back to the detected window process if session enumeration is unavailable or produces no same-game candidate. A selected audio-process change restarts capture through Windows process loopback at stereo 48 kHz float. If activation is unsupported or fails, `AudioCaptureService` starts the configured endpoint loopback instead and exposes the fallback in status without terminating the overlay. Source transitions reset smoothing and adaptive calibration so state from one game or device is not reused for another.
+The default path captures the configured output endpoint, or the current Windows multimedia output when no explicit endpoint is selected. After eight seconds without an audible frame, `SilentEndpointProbeSchedule` permits a background peak-meter scan of the other active render endpoints. The scan only considers endpoints whose shared-mode mix format is stereo and whose peak exceeds a small activity floor. Unsuccessful scans use exponential backoff capped at 30 seconds, and a successful scan switches the single loopback capture rather than keeping parallel captures alive. The automatic endpoint choice is temporary and does not overwrite the saved default-device selection.
+
+When optional game-process capture is enabled, `GameAudioProcessResolver` enumerates active render-endpoint sessions and selects the strongest active session whose executable remains inside that same game installation. It falls back to the detected window process if session enumeration is unavailable or produces no same-game candidate. A selected audio-process change restarts capture through Windows process loopback at stereo 48 kHz float. If activation is unsupported or fails, `AudioCaptureService` starts the configured endpoint loopback instead and exposes the fallback in status without terminating the overlay. All source transitions reset smoothing, loudness classification, and adaptive calibration so state from one process or device is not reused for another.
 
 The application pins `NAudio.Wasapi` `3.0.0-preview.20` because its recorder API provides the Windows process-loopback activation used here. The exact version is intentional; migration to a stable NAudio 3 release should be tested as an explicit dependency change.
 
@@ -83,7 +86,7 @@ The form is only large enough to contain the compass rather than covering the en
 
 The transparency key background and all visible geometry are painted with opaque colors so GDI+ cannot blend the chosen color with the chroma key. The WinForms window `Opacity` property controls the complete overlay's percentage transparency. Whole-overlay size is calculated in the platform-independent core as a percentage of the current target display height and applies to radius, line width, markers, listener point, tick marks, labels, and window padding together. The default size is 110% of the target display height.
 
-Rendering is split into independently enabled layers: compass ring, cardinal ticks, current direction rays, current direction markers, listener dot, fading history trail, and compass labels. A master overlay toggle controls the window without changing the individual layer selections. Marker size and visual intensity are calculated deterministically from freshness and loudness. A normal current marker uses the same result as a fresh normal trail point; emphasized markers apply their configured size multiplier and optional outline in both layers.
+Rendering is split into independently enabled layers: compass ring, cardinal ticks, current direction rays, current direction markers, listener dot, fading history trail, and compass labels. A master overlay toggle controls the window without changing the individual layer selections. Marker size and visual intensity are calculated deterministically from freshness and loudness. Ambient and loud markers each apply their own size percentage, fill color, and relative opacity to both current and trail layers. Ambient trail and current markers are drawn before the loud trail and current marker passes, guaranteeing that loud markers remain above ambient markers even across current/history boundaries. A current marker uses the same type-specific result as a fresh trail point, while trail age shrinks and fades both types. Loud markers can additionally use a separately colored outline whose base thickness is stored and edited at 0.1 px precision before whole-overlay display scaling is applied.
 
 ## Display targeting
 

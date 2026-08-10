@@ -6,12 +6,12 @@ The first version deliberately supports **stereo output only**. Stereo provides 
 
 ## Current features
 
-- Automatic process-loopback capture from the detected Steam game, with selected-output WASAPI loopback as a fallback
+- Selected/default-output WASAPI loopback capture, optional detected-game process capture, and low-frequency active-endpoint fallback when the Windows default stays silent
 - RMS-based stereo direction estimate with automatic output-level and stereo-width calibration
 - Adaptive loud-sound classification relative to recent ambience, with separately styled current and delayed markers
 - Optional manual smoothing, silence-threshold, and hard-pan calibration controls
 - Click-through, always-on-top compass overlay with current rays and a fading history trail
-- Live-previewed color, percentage opacity, display-relative whole-overlay size, thickness, marker size, ambient/loud marker emphasis, labels, position, and history duration
+- Live-previewed overlay appearance plus independent ambient/loud marker size, fill color, percentage opacity, labels, position, and history duration
 - Independent visibility toggles for the compass ring, cardinal ticks, current rays, current markers, listener dot, history trail, and F/B/L/R labels
 - Automatic display targeting for a detected Steam game window
 - Manual display selection and a display-cycling hotkey
@@ -26,7 +26,7 @@ The first version deliberately supports **stereo output only**. Stereo provides 
 - .NET 9 SDK when running from source
 - A stereo Windows output endpoint for version 1
 
-Direct game-process capture requires Windows 10 version 2004 (build 19041) or newer. On older Windows versions, or if direct activation fails, the application automatically uses the selected stereo output endpoint instead.
+Optional direct game-process capture requires Windows 10 version 2004 (build 19041) or newer. On older Windows versions, or if direct activation fails, the application automatically uses the selected stereo output endpoint instead.
 
 ## Run from source
 
@@ -44,9 +44,9 @@ The settings window opens on the first launch. Closing the settings window leave
 
 All bindings can be changed. A binding can be cleared with Delete, except the required overlay toggle, which falls back to its default if invalid.
 
-Direct detected-game audio capture and automatic audio calibration are enabled by default. When a Steam game is detected, its process audio is analyzed before the physical headset endpoint; this preserves L/R information on devices whose output loopback is dual mono after spatial-audio processing. If no game is detected or direct capture is unavailable, the selected Windows output is used automatically. Calibration scales the silence gate down for quiet sources, learns the usual stereo width, and immediately adds headroom when a wider transient such as a gunshot arrives so it is not clipped to an exact side by stale ambience calibration. Calibration restarts when the capture source changes. Both behaviors can be changed on the Audio tab.
+Selected-output capture and automatic audio calibration are enabled by default. With the `Default Windows output device` selection, the app follows the current Windows multimedia output. If that source remains silent for eight seconds, the app checks endpoint peak meters in the background and can temporarily follow the strongest other active stereo output; unsuccessful idle checks back off to at most once every 30 seconds. Only one endpoint is captured at a time. Direct detected-game process capture remains available as an optional Audio-tab setting for devices whose physical output loopback is dual mono after spatial-audio processing. Calibration scales the silence gate down for quiet sources and learns the active endpoint's usual stereo width. It normalizes that width toward a fixed lateral reference angle and immediately gives a wider transient such as a gunshot enough room not to clip to an exact side because of stale ambience calibration. This reduces direction changes between wide speaker output and headset output narrowed by crossfeed or spatial processing, but stereo amplitude alone cannot guarantee identical physical angles through every device pipeline. Calibration restarts whenever the capture source changes.
 
-The overlay is enabled by default with a white color, 40% opacity, a size of 110% of the target display height, 3 px line thickness, an 8 px direction-marker scale, zero horizontal and vertical offsets, and a five-second trail. A normal current marker starts at the same size as a fresh delayed marker and uses 70% relative marker opacity. Loud-sound emphasis is enabled with a `2.5 ×` recent-ambience threshold; loud current and delayed markers default to 150% size, 100% relative marker opacity, and a 2 px black outline. All loud-detection and emphasis values are adjustable. Only the current direction markers and fading direction trail are visible by default; every layer can be enabled independently on the Overlay tab.
+The overlay is enabled by default with a white color, 40% opacity, a size of 110% of the target display height, 3 px line thickness, an 8 px base direction-marker scale, zero horizontal and vertical offsets, and a five-second trail. Ambient current and delayed markers default to 60% of the base marker size and 40% relative marker opacity. Loud-sound emphasis is enabled with a `2.5 ×` recent-ambience threshold; loud current and delayed markers default to 160% size, 100% relative marker opacity, and a 0.8 px black outline. Both marker types have independent size, fill-color, and percentage-opacity controls; existing settings initially inherit the overlay color for both fills. Loud markers are always rendered in a top marker layer so ambient current or trail points cannot obscure them. The loud outline can be enabled separately and its color and thickness are adjustable in 0.1 px steps. Only the current direction markers and fading direction trail are visible by default; every layer can be enabled independently on the Overlay tab.
 
 ## How to read the overlay
 
@@ -73,7 +73,7 @@ With automatic targeting enabled, the application:
 
 If no game is detected, the current/manual display remains selected. Turning automatic targeting off makes the chosen display explicit and persistent.
 
-Game detection is also used by the default audio-capture mode. Games may split launcher, anti-cheat, rendering, and audio work across several processes, so the application checks active Windows audio sessions and prefers the audio-producing process from the same Steam game installation. Audio can continue to follow a detected Steam game while display targeting is manual. The tray menu's disabled `Audio:` row shows whether the active source is `Game: <process>` or a Windows output device.
+Game detection is also used when optional game-process audio capture is enabled. Games may split launcher, anti-cheat, rendering, and audio work across several processes, so that mode checks active Windows audio sessions and prefers the audio-producing process from the same Steam game installation. Process audio can continue to follow a detected Steam game while display targeting is manual. The tray menu's disabled `Audio:` row shows whether the active source is `Game: <process>`, a Windows output device, or an automatically selected endpoint fallback.
 
 The overlay works best with borderless-windowed games. Exclusive fullscreen, protected presentation paths, and some anti-cheat environments may prevent third-party topmost windows from appearing.
 

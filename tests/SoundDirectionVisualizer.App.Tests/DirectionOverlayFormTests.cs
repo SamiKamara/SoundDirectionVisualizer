@@ -9,6 +9,61 @@ namespace SoundDirectionVisualizer.App.Tests;
 public sealed class DirectionOverlayFormTests
 {
     [Fact]
+    public void SettingsPresentGameProcessCaptureAsAnOptionalDisabledMode()
+    {
+        var processCaptureEnabled = RunOnStaThread(() =>
+        {
+            using var form = new SettingsForm(new AppSettings());
+            return Descendants<CheckBox>(form).Single(checkBox =>
+                checkBox.Text == "Capture only the detected Steam game's process audio (optional)").Checked;
+        });
+
+        Assert.False(processCaptureEnabled);
+    }
+
+    [Fact]
+    public void SettingsSeparateCompleteAmbientAndLoudMarkerControls()
+    {
+        var controls = RunOnStaThread(() =>
+        {
+            using var form = new SettingsForm(new AppSettings());
+            var groups = Descendants<GroupBox>(form).ToDictionary(group => group.Text);
+            var ambient = groups["Ambient markers"];
+            var loud = groups["Loud markers"];
+            var ambientSlider = Descendants<TrackBar>(ambient).Single();
+            var loudSlider = Descendants<TrackBar>(loud).Single();
+            var loudThickness = Descendants<NumericUpDown>(loud)
+                .Single(numeric => numeric.DecimalPlaces == 1);
+
+            return (
+                AmbientLabels: Descendants<Label>(ambient).Select(label => label.Text).ToArray(),
+                AmbientButtonCount: Descendants<Button>(ambient).Count(),
+                AmbientSliderRange: (ambientSlider.Minimum, ambientSlider.Maximum),
+                LoudLabels: Descendants<Label>(loud).Select(label => label.Text).ToArray(),
+                LoudButtonCount: Descendants<Button>(loud).Count(),
+                LoudSliderRange: (loudSlider.Minimum, loudSlider.Maximum),
+                LoudOutlineToggleCount: Descendants<CheckBox>(loud).Count(),
+                LoudThicknessPrecision: (loudThickness.DecimalPlaces, loudThickness.Increment));
+        });
+
+        Assert.Contains("Size (% of base)", controls.AmbientLabels);
+        Assert.Contains("Opacity", controls.AmbientLabels);
+        Assert.Contains("Fill color", controls.AmbientLabels);
+        Assert.Equal(1, controls.AmbientButtonCount);
+        Assert.Equal((10, 100), controls.AmbientSliderRange);
+
+        Assert.Contains("Size (% of base)", controls.LoudLabels);
+        Assert.Contains("Opacity", controls.LoudLabels);
+        Assert.Contains("Fill color", controls.LoudLabels);
+        Assert.Contains("Outline color", controls.LoudLabels);
+        Assert.Contains("Outline thickness (px)", controls.LoudLabels);
+        Assert.Equal(2, controls.LoudButtonCount);
+        Assert.Equal((10, 100), controls.LoudSliderRange);
+        Assert.Equal(1, controls.LoudOutlineToggleCount);
+        Assert.Equal((1, 0.1m), controls.LoudThicknessPrecision);
+    }
+
+    [Fact]
     public void AppliesSelectedColorWithoutChromaKeyBlendingAndUsesWindowOpacity()
     {
         var result = RunOnStaThread(() =>
@@ -171,6 +226,106 @@ public sealed class DirectionOverlayFormTests
         Assert.Equal(0, markers.disabledLoud.BlackPixels);
     }
 
+    [Fact]
+    public void AmbientAndLoudMarkersUseTheirConfiguredFillColors()
+    {
+        var markers = RunOnStaThread(() =>
+        {
+            var ambient = RenderMarker(
+                SoundLoudness.Ambient,
+                showCurrentMarker: true,
+                showTrail: false,
+                frameAge: TimeSpan.Zero,
+                ambientOpacityPercent: 100,
+                ambientColorHex: "#FF0000",
+                loudColorHex: "#0000FF",
+                loudOutlineEnabled: false);
+            var loud = RenderMarker(
+                SoundLoudness.Loud,
+                showCurrentMarker: true,
+                showTrail: false,
+                frameAge: TimeSpan.Zero,
+                ambientOpacityPercent: 100,
+                ambientColorHex: "#FF0000",
+                loudColorHex: "#0000FF",
+                loudOutlineEnabled: false);
+            return (ambient, loud);
+        });
+
+        Assert.True(markers.ambient.RedPixels > 0);
+        Assert.Equal(0, markers.ambient.BluePixels);
+        Assert.True(markers.loud.BluePixels > 0);
+        Assert.Equal(0, markers.loud.RedPixels);
+    }
+
+    [Fact]
+    public void LoudTrailMarkerRendersAboveAnOverlappingAmbientCurrentMarker()
+    {
+        var pixels = RunOnStaThread(() =>
+        {
+            using var form = new DirectionOverlayForm();
+            form.ApplySettings(new AppSettings
+            {
+                OverlayOpacityPercent = 100,
+                OverlayHeightPercent = 20,
+                MarkerSize = 32,
+                AmbientMarkerSizePercent = 100,
+                AmbientMarkerOpacityPercent = 100,
+                AmbientMarkerColorHex = "#FF0000",
+                LoudMarkerSizePercent = 100,
+                LoudMarkerOpacityPercent = 100,
+                LoudMarkerColorHex = "#0000FF",
+                LoudMarkerOutlineEnabled = false,
+                ShowCurrentDirectionMarkers = true,
+                ShowDirectionTrail = true,
+                TrailDurationSeconds = 5
+            });
+
+            var estimate = new DirectionEstimate(false, 0.5, 0.5, 0, new[] { 0d });
+            var now = DateTimeOffset.UtcNow;
+            form.UpdateFrame(
+                new DirectionFrame(
+                    now - TimeSpan.FromMilliseconds(200),
+                    new StereoLevels(0.5, 0.5),
+                    estimate,
+                    SoundLoudness.Loud),
+                now);
+            form.UpdateFrame(
+                new DirectionFrame(
+                    now,
+                    new StereoLevels(0.5, 0.5),
+                    estimate,
+                    SoundLoudness.Ambient),
+                now);
+
+            using var bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height);
+            form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            var redPixels = 0;
+            var bluePixels = 0;
+
+            for (var y = 0; y < bitmap.Height; y++)
+            {
+                for (var x = 0; x < bitmap.Width; x++)
+                {
+                    var pixel = bitmap.GetPixel(x, y);
+                    if (pixel.R > pixel.B)
+                    {
+                        redPixels++;
+                    }
+                    else if (pixel.B > pixel.R)
+                    {
+                        bluePixels++;
+                    }
+                }
+            }
+
+            return (redPixels, bluePixels);
+        });
+
+        Assert.True(pixels.redPixels > 0);
+        Assert.True(pixels.bluePixels > 0);
+    }
+
     private static AppSettings CreateAllElementsHiddenSettings() => new()
     {
         OverlayColorHex = "#FFFF00",
@@ -219,19 +374,24 @@ public sealed class DirectionOverlayFormTests
         return visiblePixels;
     }
 
-    private static (int VisiblePixels, int BlackPixels) RenderCurrentMarker(SoundLoudness loudness) =>
+    private static (int VisiblePixels, int BlackPixels, int RedPixels, int BluePixels) RenderCurrentMarker(
+        SoundLoudness loudness) =>
         RenderMarker(
             loudness,
             showCurrentMarker: true,
             showTrail: false,
             frameAge: TimeSpan.Zero);
 
-    private static (int VisiblePixels, int BlackPixels) RenderMarker(
+    private static (int VisiblePixels, int BlackPixels, int RedPixels, int BluePixels) RenderMarker(
         SoundLoudness loudness,
         bool showCurrentMarker,
         bool showTrail,
         TimeSpan frameAge,
-        bool loudEmphasisEnabled = true)
+        bool loudEmphasisEnabled = true,
+        int ambientOpacityPercent = 70,
+        string ambientColorHex = "#FFFFFF",
+        string loudColorHex = "#FFFFFF",
+        bool loudOutlineEnabled = true)
     {
         using var form = new DirectionOverlayForm();
         form.ApplySettings(new AppSettings
@@ -240,10 +400,12 @@ public sealed class DirectionOverlayFormTests
             OverlayOpacityPercent = 100,
             OverlayHeightPercent = 10,
             MarkerSize = 20,
-            AmbientMarkerOpacityPercent = 70,
+            AmbientMarkerOpacityPercent = ambientOpacityPercent,
+            AmbientMarkerColorHex = ambientColorHex,
             LoudMarkerSizePercent = 150,
             LoudMarkerOpacityPercent = 100,
-            LoudMarkerOutlineEnabled = true,
+            LoudMarkerColorHex = loudColorHex,
+            LoudMarkerOutlineEnabled = loudOutlineEnabled,
             LoudMarkerOutlineColorHex = "#000000",
             LoudMarkerOutlineThickness = 2,
             LoudSoundEmphasisEnabled = loudEmphasisEnabled,
@@ -261,8 +423,12 @@ public sealed class DirectionOverlayFormTests
         form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
         var chromaKey = Color.Magenta.ToArgb();
         var black = Color.Black.ToArgb();
+        var red = Color.Red.ToArgb();
+        var blue = Color.Blue.ToArgb();
         var visiblePixels = 0;
         var blackPixels = 0;
+        var redPixels = 0;
+        var bluePixels = 0;
 
         for (var y = 0; y < bitmap.Height; y++)
         {
@@ -279,10 +445,20 @@ public sealed class DirectionOverlayFormTests
                 {
                     blackPixels++;
                 }
+
+                if (pixel == red)
+                {
+                    redPixels++;
+                }
+
+                if (pixel == blue)
+                {
+                    bluePixels++;
+                }
             }
         }
 
-        return (visiblePixels, blackPixels);
+        return (visiblePixels, blackPixels, redPixels, bluePixels);
     }
 
     private static T RunOnStaThread<T>(Func<T> action)
@@ -310,5 +486,22 @@ public sealed class DirectionOverlayFormTests
         }
 
         return result!;
+    }
+
+    private static IEnumerable<T> Descendants<T>(Control root)
+        where T : Control
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var descendant in Descendants<T>(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 }

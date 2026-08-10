@@ -16,7 +16,7 @@ The core test suite currently covers:
 - intermediate mirrored candidates;
 - automatic low-volume silence-gate scaling;
 - narrow- and wide-stereo calibration plus minimum-width noise protection;
-- immediate headroom and gradual release for wider transients after narrow ambience;
+- angular-reference stereo-width normalization across compressed and wide endpoints, plus immediate transient headroom and gradual release after narrow ambience;
 - preservation of an exact side only for a true single-channel hard pan;
 - adaptive loudness warm-up, recent-ambience thresholding, sustained-level adaptation, and reset;
 - calibration reset between output devices;
@@ -26,11 +26,15 @@ The core test suite currently covers:
 - display-relative whole-overlay size calculations;
 - exact selected-color rendering without chroma-key contamination;
 - application of opacity to the overlay window;
-- default and legacy-settings migration for preferred detected-game audio capture;
+- endpoint-capture default and migration away from the former process-capture default;
+- silent-endpoint probe grace period, bounded idle backoff, stereo/activity filtering, current-endpoint exclusion, and strongest-endpoint selection;
 - limited-information executable-path resolution and invalid-process handling;
 - Steam game-install boundary resolution, including sibling-prefix rejection;
 - same-game audio-process selection, strongest-session preference, and detected-process fallback;
-- equal ambient spawn/fresh-trail sizing plus loud size, intensity, delayed-state, and outline rendering;
+- independent ambient/loud size, fill-color, relative-opacity, delayed-state, and loud-outline rendering;
+- loud-marker top-layer ordering over overlapping ambient current and trail markers;
+- marker appearance normalization, legacy overlay-color inheritance, and tenth-pixel loud-outline precision;
+- separate Ambient markers and Loud markers settings groups with percentage-opacity sliders;
 - independent rendering and complete hiding of every overlay element layer.
 
 Add tests in the same change whenever direction math, sample decoding, thresholds, candidate behavior, or history behavior changes. Every newly supported sample format or channel layout needs a deterministic byte-level fixture.
@@ -49,11 +53,11 @@ GitHub Actions runs these commands on `windows-latest` for pushes and pull reque
 
 Before a user-facing release:
 
-1. Start the app with a Steam game running and confirm the tray audio status reads `Audio: Game: <process>`.
-2. For a game with separate launcher/anti-cheat/game processes, confirm the status names the process owning the active game audio session rather than an idle launcher.
-3. Stop the game and confirm capture falls back to the selected/default stereo endpoint without exiting; relaunch it and confirm direct game capture resumes.
-4. Disable `Prefer audio captured directly from the detected Steam game` and confirm the tray status remains on the selected output device; enable it again.
-5. On a headset whose endpoint loopback is dual mono, confirm known left/right game sounds move laterally under process capture instead of remaining at front/back.
+1. Start the app with a Steam game running and the optional process-capture setting disabled; confirm the tray audio status names the selected/default Windows output device and both menu and in-game sounds create frames.
+2. Leave the Windows default output silent and play audio through another active stereo output. After the silence grace period, confirm the tray status changes to `Audio: Auto fallback: <device>` without running parallel captures.
+3. With all outputs silent, confirm endpoint probes back off to at most once every 30 seconds and the app remains idle. Confirm surround-only candidates are not silently treated as stereo.
+4. Enable `Capture only the detected Steam game's process audio`. For a game with separate launcher/anti-cheat/game processes, confirm the status reads `Audio: Game: <process>` and names the active audio process rather than an idle launcher; disable the option and confirm endpoint capture resumes.
+5. On a headset whose endpoint loopback is dual mono, confirm known left/right game sounds remain ambiguous under endpoint capture but can move laterally when optional process capture is enabled and the game exposes usable stereo there.
 6. Play silence and confirm no current direction rays appear.
 7. With automatic calibration enabled, play a known center, left, right, and sweeping stereo test at both low and normal endpoint volumes.
 8. After steady narrow ambience, produce a louder directional transient and confirm it remains a front/back candidate pair instead of clipping to exactly left or right; a true single-channel hard pan may still meet at the side.
@@ -61,17 +65,17 @@ Before a user-facing release:
 10. Confirm the game retains keyboard and mouse focus while the overlay is visible.
 11. After at least a second of steady ambience, produce a distinctly louder sound and confirm its current and delayed markers use the configured larger size, stronger visual opacity, and outline.
 12. Confirm a normal current marker is the same size as a fresh normal trail marker, and that the loud marker returns to normal after the sound level stays steady long enough to become the new ambience.
-13. Change the loud threshold, both marker opacities, loud size, outline visibility/color/thickness, and master emphasis toggle; confirm styling previews live and detection changes after Save restarts capture.
+13. In the separate Ambient markers and Loud markers groups, change both size percentages, percentage-opacity sliders, and fill colors; then change loud outline visibility, color, and thickness in 0.1 px steps. Confirm current and trail markers preview the type-specific styling live, loud markers remain above overlapping ambient markers, and the master emphasis toggle renders loud frames with the ambient style when disabled.
 14. Confirm color, percentage opacity, display-height size, dimensions, offsets, labels, and trail settings preview immediately while editing.
 15. Press Cancel and confirm the previously saved appearance is restored; reopen settings, change values, press Save, and confirm they persist.
 16. Toggle the ring, cardinal ticks, current rays, current markers, listener dot, trail, and labels independently; confirm only the selected layers remain.
 17. Confirm overlay toggle and settings hotkeys work globally.
 18. Confirm manual display selection and display cycling on a multi-monitor system.
 19. With Steam available, move a borderless game between displays and confirm auto targeting follows it.
-20. Turn automatic display targeting off while preferred game audio remains on; confirm the overlay stays on the manual display while audio still follows the game process.
+20. Turn automatic display targeting off while optional game-process capture remains on; confirm the overlay stays on the manual display while audio still follows the game process.
 21. Disconnect/reconnect a display and confirm the app falls back without exiting.
 22. Disable automatic calibration and confirm the manual silence-threshold and hard-pan controls become available and retain the legacy fixed behavior.
-23. Select a non-stereo endpoint, disable direct game capture, and confirm a clear error appears without a crash.
+23. Select a non-stereo endpoint with game-process capture disabled and confirm a clear error appears without a crash; confirm automatic endpoint discovery never down-selects a multichannel endpoint.
 24. Launch a second app instance and confirm it reopens the existing settings window.
 25. Exit from the tray and confirm capture, overlay, hotkeys, and notification icon stop.
 

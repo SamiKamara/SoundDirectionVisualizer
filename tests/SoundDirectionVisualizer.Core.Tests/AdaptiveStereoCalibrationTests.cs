@@ -55,7 +55,7 @@ public sealed class AdaptiveStereoCalibrationTests
             effective.SilenceRmsThreshold,
             effective.ModelMaximumBalance);
 
-        Assert.InRange(effective.ModelMaximumBalance, 0.05, 0.055);
+        Assert.InRange(effective.ModelMaximumBalance, 0.041, 0.043);
         Assert.InRange(estimate.CandidateAzimuths[0], 45, 90);
     }
 
@@ -77,7 +77,7 @@ public sealed class AdaptiveStereoCalibrationTests
     }
 
     [Fact]
-    public void SuddenWideTransientGetsHeadroomBeforeItsDirectionIsEstimated()
+    public void SuddenWideTransientMapsToTheLearnedSideReference()
     {
         var calibration = new AdaptiveStereoCalibration();
 
@@ -99,9 +99,21 @@ public sealed class AdaptiveStereoCalibrationTests
             effective.SilenceRmsThreshold,
             effective.ModelMaximumBalance);
 
-        Assert.Equal(1.0, effective.ModelMaximumBalance, precision: 6);
+        Assert.InRange(effective.ModelMaximumBalance, 0.827, 0.829);
         Assert.Equal(2, estimate.CandidateAzimuths.Count);
-        Assert.InRange(estimate.CandidateAzimuths[0], 50, 55);
+        Assert.InRange(estimate.CandidateAzimuths[0], 74.9, 75.1);
+        Assert.InRange(estimate.CandidateAzimuths[1], 104.9, 105.1);
+    }
+
+    [Fact]
+    public void CompressedAndWideEndpointsMapRelativeSideSoundsToSimilarAngles()
+    {
+        var compressedEndpoint = EstimateAfterCalibration(new StereoLevels(0.10, 0.90));
+        var wideEndpoint = EstimateAfterCalibration(new StereoLevels(0.01, 0.99));
+
+        Assert.InRange(compressedEndpoint, 74.9, 75.1);
+        Assert.InRange(wideEndpoint, 78, 80);
+        Assert.InRange(Math.Abs(wideEndpoint - compressedEndpoint), 0, 4);
     }
 
     [Fact]
@@ -132,7 +144,7 @@ public sealed class AdaptiveStereoCalibrationTests
                 configuredMaximumBalance: AdaptiveStereoCalibration.TheoreticalMaximumBalance);
         }
 
-        Assert.InRange(effective.ModelMaximumBalance, 0.05, 0.06);
+        Assert.InRange(effective.ModelMaximumBalance, 0.041, 0.043);
     }
 
     [Fact]
@@ -191,5 +203,20 @@ public sealed class AdaptiveStereoCalibrationTests
         var effective = calibration.Update(new StereoLevels(0.48, 0.52), 0.00125, 0.50);
 
         Assert.Equal(0.08, effective.ModelMaximumBalance, precision: 6);
+    }
+
+    private static double EstimateAfterCalibration(StereoLevels levels)
+    {
+        var calibration = new AdaptiveStereoCalibration();
+        var effective = calibration.Update(
+            levels,
+            configuredSilenceThreshold: 0.00125,
+            configuredMaximumBalance: AdaptiveStereoCalibration.TheoreticalMaximumBalance);
+        var estimate = StereoDirectionEstimator.Estimate(
+            levels,
+            effective.SilenceRmsThreshold,
+            effective.ModelMaximumBalance);
+
+        return estimate.CandidateAzimuths[0];
     }
 }
