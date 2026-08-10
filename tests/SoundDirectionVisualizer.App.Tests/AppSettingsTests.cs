@@ -14,6 +14,7 @@ public sealed class AppSettingsTests
 
         Assert.True(settings.OverlayEnabled);
         Assert.False(settings.UseDetectedGameProcessAudio);
+        Assert.True(settings.AutomaticallyFallbackToGameProcessAudio);
         Assert.True(settings.AutomaticAudioCalibration);
         Assert.Equal(0.50, settings.ModelMaximumBalance, precision: 6);
         Assert.True(settings.LoudSoundEmphasisEnabled);
@@ -144,11 +145,25 @@ public sealed class AppSettingsTests
     [Fact]
     public void ClonePreservesOptionalGameProcessAudioCapture()
     {
-        var settings = new AppSettings { UseDetectedGameProcessAudio = true };
+        var settings = new AppSettings
+        {
+            UseDetectedGameProcessAudio = true,
+            AutomaticallyFallbackToGameProcessAudio = false
+        };
 
         var clone = settings.Clone();
 
         Assert.True(clone.UseDetectedGameProcessAudio);
+        Assert.False(clone.AutomaticallyFallbackToGameProcessAudio);
+    }
+
+    [Fact]
+    public void ExistingSettingsEnableAutomaticCenteredOutputFallback()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>("{\"OverlayEnabled\":true}");
+
+        Assert.NotNull(settings);
+        Assert.True(settings.AutomaticallyFallbackToGameProcessAudio);
     }
 
     [Fact]

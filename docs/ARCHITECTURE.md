@@ -29,6 +29,7 @@ Targets `net9.0-windows` with WinForms.
 - `DirectionOverlayForm` draws the click-through compass, current candidates, and history.
 - `GameWindowMonitor` identifies Steam game windows and their displays, including processes whose full module metadata is restricted by anti-cheat software.
 - `GameAudioProcessResolver` selects an active audio-session process from the detected Steam game's installation directory when launcher, anti-cheat, and game audio use different processes.
+- `CenteredGameAudioFallbackDetector` recognizes a sustained audible front/back-only result and requests process capture without maintaining per-game rules.
 - `SoundDirectionVisualizerApplicationContext` coordinates audio, overlay, tray UI, hotkeys, settings, display changes, and app lifetime.
 - `SettingsStore` persists normalized JSON settings under `%AppData%`.
 
@@ -47,6 +48,7 @@ flowchart LR
   Samples --> Smooth["StereoLevelSmoother"]
   Smooth --> Estimate["StereoDirectionEstimator"]
   Estimate --> Latest["Latest DirectionFrame"]
+  Latest --> Centered["Centered-output fallback detector"]
   Latest --> Overlay["DirectionOverlayForm"]
   Overlay --> Game["Click-through game overlay"]
 
@@ -54,6 +56,8 @@ flowchart LR
   Screens["Windows displays"] --> Target
   Target --> Overlay
   Target --> Capture
+  Target --> Centered
+  Centered -->|"Automatic process fallback"| Capture
 
   Settings["settings.json"] --> Coordinator["ApplicationContext"]
   Hotkeys["Global hotkeys"] --> Coordinator
@@ -69,7 +73,9 @@ NAudio invokes its data callback on the capture thread, and `AudioCaptureService
 
 The default path captures the configured output endpoint, or the current Windows multimedia output when no explicit endpoint is selected. After eight seconds without an audible frame, `SilentEndpointProbeSchedule` permits a background peak-meter scan of the other active render endpoints. The scan only considers endpoints whose shared-mode mix format is stereo and whose peak exceeds a small activity floor. Unsuccessful scans use exponential backoff capped at 30 seconds, and a successful scan switches the single loopback capture rather than keeping parallel captures alive. The automatic endpoint choice is temporary and does not overwrite the saved default-device selection.
 
-When optional game-process capture is enabled, `GameAudioProcessResolver` enumerates active render-endpoint sessions and selects the strongest active session whose executable remains inside that same game installation. It falls back to the detected window process if session enumeration is unavailable or produces no same-game candidate. A selected audio-process change restarts capture through Windows process loopback at stereo 48 kHz float. If activation is unsupported or fails, `AudioCaptureService` starts the configured endpoint loopback instead and exposes the fallback in status without terminating the overlay. All source transitions reset smoothing, loudness classification, and adaptive calibration so state from one process or device is not reused for another.
+When the automatic centered-output fallback is enabled and a Steam game is detected, `CenteredGameAudioFallbackDetector` observes endpoint-capture direction frames. It requests game-process capture only after at least 32 audible front/back candidate frames span eight seconds with absolute balance no greater than `0.0025`. Any lateral audible frame resets the interval, as does an audio gap longer than two seconds. The fallback is a runtime state rather than a change to the manual process-capture setting. It remains stable for that detected game to avoid source oscillation, resets when the game changes or exits, and can be disabled entirely through its own Audio-tab setting. Detection is content-based and applies to every Steam game without a compatibility list.
+
+When manual or automatically requested game-process capture is active, `GameAudioProcessResolver` enumerates active render-endpoint sessions and selects the strongest active session whose executable remains inside that same game installation. It falls back to the detected window process if session enumeration is unavailable or produces no same-game candidate. A selected audio-process change restarts capture through Windows process loopback at stereo 48 kHz float. If activation is unsupported or fails, `AudioCaptureService` starts the configured endpoint loopback instead and exposes the fallback in status without terminating the overlay. All source transitions reset smoothing, loudness classification, adaptive calibration, and centered-output observation so state from one process or device is not reused for another.
 
 The application pins `NAudio.Wasapi` `3.0.0-preview.20` because its recorder API provides the Windows process-loopback activation used here. The exact version is intentional; migration to a stable NAudio 3 release should be tested as an explicit dependency change.
 
@@ -100,7 +106,7 @@ Automatic targeting follows this priority:
 
 Steam containment uses path-relative directory checks rather than string-prefix checks, so a similarly named sibling directory cannot be mistaken for a game under `steamapps\common`. The first directory below `common` is retained as the game-install boundary for same-game audio-session selection.
 
-Foreground changes trigger a refresh through a WinEvent hook. A two-second timer provides recovery from missed events, process startup races, and display changes. Manual cycling disables automatic display targeting intentionally, while game detection can remain active solely for preferred process-audio capture.
+Foreground changes trigger a refresh through a WinEvent hook. A two-second timer provides recovery from missed events, process startup races, and display changes. Manual cycling disables automatic display targeting intentionally, while game detection can remain active solely for manual process capture or the automatic centered-output fallback.
 
 ## Extension points
 

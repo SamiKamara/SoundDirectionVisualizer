@@ -6,7 +6,7 @@ This document records direction, not a release promise. Behavioral work should a
 
 Implemented in the initial project:
 
-- selected/default-endpoint loopback capture with silent-default endpoint discovery and optional detected-game process capture
+- selected/default-endpoint loopback capture with silent-default endpoint discovery, optional detected-game process capture, and content-based automatic process fallback for sustained centered Steam-game output
 - deterministic sample decoding and RMS analysis
 - adjustable smoothing, silence threshold, and balance model
 - explicit front/back ambiguity
@@ -18,7 +18,7 @@ Near-term hardening:
 
 - test on a wider set of endpoint formats and Windows scaling combinations;
 - add structured diagnostics/export for device format and capture failures;
-- add persistent dual-mono endpoint detection and an in-app capture-health indicator;
+- add an in-app capture-health indicator with visibility into automatic fallback observations and source changes;
 - add an optional calibration view and synthetic pan test;
 - profile overlay painting during sustained high-frequency capture;
 - investigate non-Steam target rules without weakening predictable screen selection;

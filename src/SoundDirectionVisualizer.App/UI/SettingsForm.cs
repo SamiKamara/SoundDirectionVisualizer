@@ -9,6 +9,11 @@ public sealed class SettingsForm : Form
         Text = "Capture only the detected Steam game's process audio (optional)",
         AutoSize = true
     };
+    private readonly CheckBox _automaticallyFallbackToGameProcessAudio = new()
+    {
+        Text = "Automatically try game-process audio when a running game's output stays centered",
+        AutoSize = true
+    };
     private readonly CheckBox _automaticAudioCalibration = new()
     {
         Text = "Automatically adapt to output level and stereo width (recommended)",
@@ -175,6 +180,7 @@ public sealed class SettingsForm : Form
         var page = CreateTab("Audio");
         var layout = CreateTwoColumnTable();
         AddWideRow(layout, _useDetectedGameProcessAudio);
+        AddWideRow(layout, _automaticallyFallbackToGameProcessAudio);
         AddRow(layout, "Output device", _audioDevice);
         AddWideRow(layout, _automaticAudioCalibration);
         AddRow(layout, "Silence threshold (RMS)", _silenceThreshold);
@@ -185,7 +191,8 @@ public sealed class SettingsForm : Form
         AddWideRow(layout, CreateNote(
             "By default, audio is captured from the selected Windows output device. If the default device stays silent, the app occasionally " +
             "checks other active stereo output devices and temporarily follows one carrying audio. Optional game-process capture can preserve " +
-            "stereo direction when a headset or spatial-audio driver exposes only dual mono at its physical output loopback. Both modes require exactly two channels."));
+            "stereo direction when a headset or spatial-audio driver exposes only dual mono at its physical output loopback. When the automatic fallback is enabled, " +
+            "the app also tries game-process capture if audible output remains centered for eight seconds while a Steam game is running. Both modes require exactly two channels."));
         AddWideRow(layout, CreateNote(
             "Automatic calibration scales the silence gate, normalizes each source's usual stereo width toward a consistent lateral angle, and adds immediate headroom for wider transient sounds. " +
             "Disable it only when using the manual silence threshold and hard-pan balance values."));
@@ -360,6 +367,7 @@ public sealed class SettingsForm : Form
 
         _overlayEnabled.Checked = settings.OverlayEnabled;
         _useDetectedGameProcessAudio.Checked = settings.UseDetectedGameProcessAudio;
+        _automaticallyFallbackToGameProcessAudio.Checked = settings.AutomaticallyFallbackToGameProcessAudio;
         _automaticAudioCalibration.Checked = settings.AutomaticAudioCalibration;
         _silenceThreshold.Value = (decimal)settings.SilenceRmsThreshold;
         _smoothing.Value = (decimal)settings.SmoothingFactor;
@@ -496,6 +504,7 @@ public sealed class SettingsForm : Form
             OverlayEnabled = _overlayEnabled.Checked,
             AudioDeviceId = selectedEndpoint?.Id,
             UseDetectedGameProcessAudio = _useDetectedGameProcessAudio.Checked,
+            AutomaticallyFallbackToGameProcessAudio = _automaticallyFallbackToGameProcessAudio.Checked,
             AutomaticAudioCalibration = _automaticAudioCalibration.Checked,
             SilenceRmsThreshold = (double)_silenceThreshold.Value,
             SmoothingFactor = (double)_smoothing.Value,

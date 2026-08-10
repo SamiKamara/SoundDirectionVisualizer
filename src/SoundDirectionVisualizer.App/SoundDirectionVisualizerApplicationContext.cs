@@ -29,6 +29,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     private readonly System.Windows.Forms.Timer _renderTimer = new() { Interval = 33 };
     private readonly System.Windows.Forms.Timer _targetRefreshTimer = new() { Interval = 2000 };
     private readonly SilentEndpointProbeSchedule _silentEndpointProbeSchedule = new();
+    private readonly CenteredGameAudioFallbackDetector _centeredGameAudioFallbackDetector = new();
     private readonly System.Windows.Forms.Timer? _startupSettingsTimer;
     private readonly GameWindowMonitor _gameWindowMonitor;
     private readonly GameAudioProcessResolver _gameAudioProcessResolver = new();
@@ -43,6 +44,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     private bool _pendingAutoTargetRefresh;
     private bool _pendingAutoTargetForceRefresh;
     private bool _audioEndpointProbeInProgress;
+    private bool _automaticGameProcessAudioFallbackActive;
     private bool _isExiting;
     private bool _captureFailureShown;
     private string? _captureFailure;
@@ -142,6 +144,8 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
 
     private void HandleDirectionFrame(object? sender, DirectionFrame frame)
     {
+        var requestAutomaticGameAudioFallback = false;
+
         lock (_frameGate)
         {
             _latestFrame = frame;
@@ -149,7 +153,71 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
             {
                 _silentEndpointProbeSchedule.ObserveAudibleFrame(DateTimeOffset.UtcNow);
             }
+
+            if (_settings.AutomaticallyFallbackToGameProcessAudio
+                && !_settings.UseDetectedGameProcessAudio
+                && !_automaticGameProcessAudioFallbackActive
+                && _detectedGame is not null
+                && !_audioCapture.IsProcessCapture)
+            {
+                requestAutomaticGameAudioFallback = _centeredGameAudioFallbackDetector.Observe(
+                    frame.Timestamp,
+                    frame.Estimate);
+            }
+            else
+            {
+                _centeredGameAudioFallbackDetector.Reset();
+            }
         }
+
+        if (requestAutomaticGameAudioFallback)
+        {
+            RequestAutomaticGameProcessAudioFallback();
+        }
+    }
+
+    private void RequestAutomaticGameProcessAudioFallback()
+    {
+        try
+        {
+            if (!_uiDispatcher.IsDisposed)
+            {
+                _uiDispatcher.BeginInvoke(new MethodInvoker(ActivateAutomaticGameProcessAudioFallback));
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private void ActivateAutomaticGameProcessAudioFallback()
+    {
+        if (_isExiting
+            || !_settings.AutomaticallyFallbackToGameProcessAudio
+            || _settings.UseDetectedGameProcessAudio
+            || _automaticGameProcessAudioFallbackActive
+            || _detectedGame is null
+            || _audioCapture.IsProcessCapture)
+        {
+            return;
+        }
+
+        _automaticGameProcessAudioFallbackActive = true;
+        lock (_frameGate)
+        {
+            _centeredGameAudioFallbackDetector.Reset();
+        }
+
+        _notifyIcon.ShowBalloonTip(
+            6000,
+            "Centered game audio detected",
+            $"{_detectedGame.ProcessName} remained centered for eight seconds. " +
+            "Trying direct game-process audio automatically.",
+            ToolTipIcon.Info);
+        RefreshTargetScreen(force: true);
     }
 
     private void HandleCaptureFailed(object? sender, string message)
@@ -189,8 +257,9 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     {
         var generation = ++_audioCaptureGeneration;
         var settings = _settings.Clone();
-        var preferredGame = settings.UseDetectedGameProcessAudio ? _detectedGameAudio : null;
-        var endpointOverride = !settings.UseDetectedGameProcessAudio
+        var useDetectedGameProcessAudio = ShouldUseDetectedGameProcessAudio;
+        var preferredGame = useDetectedGameProcessAudio ? _detectedGameAudio : null;
+        var endpointOverride = !useDetectedGameProcessAudio
             && settings.AudioDeviceId is null
                 ? automaticEndpointId
                 : null;
@@ -199,6 +268,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
             _latestFrame = null;
             _captureFailure = null;
             _silentEndpointProbeSchedule.Reset(DateTimeOffset.UtcNow);
+            _centeredGameAudioFallbackDetector.Reset();
         }
 
         _captureFailureShown = false;
@@ -221,9 +291,14 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                     endpointOverride,
                     _audioCapture.ActiveDeviceId,
                     StringComparison.OrdinalIgnoreCase);
-            _audioStatusMenuItem.Text = usingAutomaticEndpoint
-                ? $"Audio: Auto fallback: {_audioCapture.ActiveDeviceName}"
-                : $"Audio: {_audioCapture.ActiveDeviceName}";
+            var usingAutomaticGameFallback = _automaticGameProcessAudioFallbackActive
+                && !_settings.UseDetectedGameProcessAudio
+                && _audioCapture.IsProcessCapture;
+            _audioStatusMenuItem.Text = usingAutomaticGameFallback
+                ? $"Audio: Auto game fallback: {_audioCapture.ActiveDeviceName}"
+                : usingAutomaticEndpoint
+                    ? $"Audio: Auto endpoint fallback: {_audioCapture.ActiveDeviceName}"
+                    : $"Audio: {_audioCapture.ActiveDeviceName}";
 
             if (_audioCapture.ProcessCaptureFallbackReason is not null
                 && preferredGame is not null
@@ -304,11 +379,21 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         ProbeSilentDefaultAudioEndpoint();
     }
 
+    private bool ShouldUseDetectedGameProcessAudio =>
+        _settings.UseDetectedGameProcessAudio
+        || (_settings.AutomaticallyFallbackToGameProcessAudio
+            && _automaticGameProcessAudioFallbackActive);
+
+    private bool NeedsSteamGameDetection =>
+        _settings.AutoDetectSteamGameMonitor
+        || _settings.UseDetectedGameProcessAudio
+        || _settings.AutomaticallyFallbackToGameProcessAudio;
+
     private void ProbeSilentDefaultAudioEndpoint()
     {
         if (_isExiting
             || _audioEndpointProbeInProgress
-            || _settings.UseDetectedGameProcessAudio
+            || ShouldUseDetectedGameProcessAudio
             || _settings.AudioDeviceId is not null
             || _audioCapture.IsProcessCapture
             || _audioCapture.ActiveDeviceId is null)
@@ -342,7 +427,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
 
             if (_isExiting
                 || captureGeneration != _audioCaptureGeneration
-                || _settings.UseDetectedGameProcessAudio
+                || ShouldUseDetectedGameProcessAudio
                 || _settings.AudioDeviceId is not null)
             {
                 return;
@@ -403,7 +488,23 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         {
             if (_activeSettingsForm.ShowDialog() == DialogResult.OK)
             {
-                _settings = _activeSettingsForm.ResultSettings.Clone();
+                var previousAudioDeviceId = _settings.AudioDeviceId;
+                var nextSettings = _activeSettingsForm.ResultSettings.Clone();
+                if (!nextSettings.AutomaticallyFallbackToGameProcessAudio
+                    || nextSettings.UseDetectedGameProcessAudio
+                    || !string.Equals(
+                        previousAudioDeviceId,
+                        nextSettings.AudioDeviceId,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    _automaticGameProcessAudioFallbackActive = false;
+                    lock (_frameGate)
+                    {
+                        _centeredGameAudioFallbackDetector.Reset();
+                    }
+                }
+
+                _settings = nextSettings;
                 settingsSaved = true;
                 PersistSettings();
                 _overlayForm.ApplySettings(_settings);
@@ -490,11 +591,17 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
             return;
         }
 
-        if (!_settings.AutoDetectSteamGameMonitor && !_settings.UseDetectedGameProcessAudio)
+        if (!NeedsSteamGameDetection)
         {
             var previousProcessId = _detectedGame?.ProcessId;
             _detectedGame = null;
             _detectedGameAudio = null;
+            _automaticGameProcessAudioFallbackActive = false;
+            lock (_frameGate)
+            {
+                _centeredGameAudioFallbackDetector.Reset();
+            }
+
             if (previousProcessId.HasValue || _audioCapture.IsProcessCapture)
             {
                 StartAudioCapture();
@@ -535,7 +642,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                 _pendingAutoTargetRefresh = false;
                 _pendingAutoTargetForceRefresh = false;
 
-                var useDetectedGameProcessAudio = _settings.UseDetectedGameProcessAudio;
+                var useDetectedGameProcessAudio = ShouldUseDetectedGameProcessAudio;
                 var detection = await Task.Run(() =>
                 {
                     try
@@ -552,21 +659,34 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                     }
                 });
 
-                if (_isExiting
-                    || (!_settings.AutoDetectSteamGameMonitor && !_settings.UseDetectedGameProcessAudio))
+                if (_isExiting || !NeedsSteamGameDetection)
                 {
                     return;
                 }
 
-                var previousPreferredProcessId = _settings.UseDetectedGameProcessAudio
+                var previousGameProcessId = _detectedGame?.ProcessId;
+                var previousPreferredProcessId = ShouldUseDetectedGameProcessAudio
                     ? _detectedGameAudio?.ProcessId
                     : null;
+                var gameChanged = previousGameProcessId != detection.Game?.ProcessId;
+                if (gameChanged)
+                {
+                    _automaticGameProcessAudioFallbackActive = false;
+                    lock (_frameGate)
+                    {
+                        _centeredGameAudioFallbackDetector.Reset();
+                    }
+                }
+
                 _detectedGame = detection.Game;
-                _detectedGameAudio = detection.Audio;
-                var nextPreferredProcessId = _settings.UseDetectedGameProcessAudio
+                _detectedGameAudio = ShouldUseDetectedGameProcessAudio
+                    ? detection.Audio
+                    : null;
+                var nextPreferredProcessId = ShouldUseDetectedGameProcessAudio
                     ? detection.Audio?.ProcessId
                     : null;
-                if (previousPreferredProcessId != nextPreferredProcessId)
+                if (previousPreferredProcessId != nextPreferredProcessId
+                    || (gameChanged && _audioCapture.IsProcessCapture))
                 {
                     StartAudioCapture();
                 }
@@ -675,7 +795,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         uint eventTime)
     {
         if (_isExiting
-            || (!_settings.AutoDetectSteamGameMonitor && !_settings.UseDetectedGameProcessAudio)
+            || !NeedsSteamGameDetection
             || _uiDispatcher.IsDisposed)
         {
             return;

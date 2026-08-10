@@ -14,6 +14,8 @@ If the default endpoint remains below the effective silence gate for eight secon
 
 Direct detected-game process capture is an optional setting. If a game uses separate launcher, anti-cheat, and audio processes, that mode prefers an active audio-session process from the same verified Steam game installation. Windows process-loopback capture is independent of the game's current physical output endpoint and is available on Windows 10 version 2004 (build 19041) and newer. It can preserve stereo information when a physical spatial-audio or Bluetooth endpoint exposes only dual mono, but it can also miss audio routed through a different game process or session. If direct activation fails, endpoint loopback is used automatically. The tray audio status identifies the source actually in use.
 
+An independent automatic fallback is enabled by default. While a Steam game is detected and endpoint capture is active, at least 32 audible front/back-only frames must remain within an absolute raw-balance tolerance of `0.0025` across eight seconds before process capture is requested. A lateral audible frame resets the interval; a quiet gap longer than two seconds also resets it, so an isolated centered sound followed by silence cannot trigger a switch. The automatic choice lasts only for the current detected game session and does not write the manual process-capture setting. It uses no per-game compatibility list and can be disabled with its own Audio-tab checkbox. This heuristic can still activate during legitimately long centered content, because equal channel energy alone cannot distinguish dual mono from a real center sound.
+
 ## Level calculation
 
 For each captured block, the root mean square level is calculated independently for left and right:
@@ -99,6 +101,7 @@ Settings should be tested with a repeatable stereo pan sample before being tuned
 - Relative level classification cannot determine whether a loud frame is a gunshot, UI sound, nearby engine, music peak, or several simultaneous sources.
 - Process capture includes the selected same-installation audio process tree. Audio routed through a process outside the verified Steam game directory may still require endpoint fallback.
 - Direct game capture requires Windows build 19041 or newer and falls back automatically when unavailable.
+- The automatic centered-output fallback is a heuristic: eight seconds of genuinely centered content can look identical to a dual-mono endpoint and cause an unnecessary but session-local process-capture attempt.
 - An endpoint-loopback fallback that exposes true dual mono contains no recoverable left/right direction information.
 - Automatic calibration can amplify a narrow L/R energy difference, but cannot recover direction when a binaural mix encodes it only in timing or spectral cues and has equal channel energy.
 - Music, UI sounds, dialogue, reverberation, and game ambience all contribute.

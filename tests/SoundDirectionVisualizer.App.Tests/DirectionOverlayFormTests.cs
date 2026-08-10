@@ -11,14 +11,17 @@ public sealed class DirectionOverlayFormTests
     [Fact]
     public void SettingsPresentGameProcessCaptureAsAnOptionalDisabledMode()
     {
-        var processCaptureEnabled = RunOnStaThread(() =>
+        var captureModes = RunOnStaThread(() =>
         {
             using var form = new SettingsForm(new AppSettings());
-            return Descendants<CheckBox>(form).Single(checkBox =>
-                checkBox.Text == "Capture only the detected Steam game's process audio (optional)").Checked;
+            var checkBoxes = Descendants<CheckBox>(form).ToDictionary(checkBox => checkBox.Text);
+            return (
+                Manual: checkBoxes["Capture only the detected Steam game's process audio (optional)"].Checked,
+                Automatic: checkBoxes["Automatically try game-process audio when a running game's output stays centered"].Checked);
         });
 
-        Assert.False(processCaptureEnabled);
+        Assert.False(captureModes.Manual);
+        Assert.True(captureModes.Automatic);
     }
 
     [Fact]

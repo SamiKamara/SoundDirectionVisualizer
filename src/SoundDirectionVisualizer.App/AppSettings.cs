@@ -11,6 +11,8 @@ public sealed class AppSettings
 
     public bool UseDetectedGameProcessAudio { get; set; }
 
+    public bool AutomaticallyFallbackToGameProcessAudio { get; set; } = true;
+
     [JsonPropertyName("PreferDetectedGameAudio")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool LegacyPreferDetectedGameAudio { get; set; }
@@ -92,6 +94,7 @@ public sealed class AppSettings
             OverlayEnabled = OverlayEnabled,
             AudioDeviceId = AudioDeviceId,
             UseDetectedGameProcessAudio = UseDetectedGameProcessAudio,
+            AutomaticallyFallbackToGameProcessAudio = AutomaticallyFallbackToGameProcessAudio,
             AutomaticAudioCalibration = AutomaticAudioCalibration,
             SilenceRmsThreshold = SilenceRmsThreshold,
             SmoothingFactor = SmoothingFactor,
