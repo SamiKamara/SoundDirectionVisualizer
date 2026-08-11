@@ -33,8 +33,8 @@ public sealed class DirectionOverlayFormTests
             var groups = Descendants<GroupBox>(form).ToDictionary(group => group.Text);
             var ambient = groups["Ambient markers"];
             var loud = groups["Loud markers"];
-            var ambientSlider = Descendants<TrackBar>(ambient).Single();
-            var loudSlider = Descendants<TrackBar>(loud).Single();
+            var ambientSlider = Descendants<DarkSlider>(ambient).Single();
+            var loudSlider = Descendants<DarkSlider>(loud).Single();
             var loudThickness = Descendants<NumericUpDown>(loud)
                 .Single(numeric => numeric.DecimalPlaces == 1);
 
@@ -64,6 +64,61 @@ public sealed class DirectionOverlayFormTests
         Assert.Equal((10, 100), controls.LoudSliderRange);
         Assert.Equal(1, controls.LoudOutlineToggleCount);
         Assert.Equal((1, 0.1m), controls.LoudThicknessPrecision);
+    }
+
+    [Fact]
+    public void SettingsUseTheDarkVisualLanguageAndKeyboardAccessibleSliders()
+    {
+        var visualLanguage = RunOnStaThread(() =>
+        {
+            using var form = new SettingsForm(new AppSettings());
+            form.Show();
+            Application.DoEvents();
+            var tabs = Descendants<DarkTabControl>(form).Single();
+            tabs.SelectedIndex = 1;
+            Application.DoEvents();
+            var sliders = Descendants<DarkSlider>(form).ToArray();
+            var buttons = Descendants<Button>(form).ToArray();
+            var inputs = Descendants<ComboBox>(form).ToArray();
+            var overlayPage = tabs.SelectedTab!;
+            var overlayPageRight = overlayPage.RectangleToScreen(overlayPage.ClientRectangle).Right;
+            var overlayContent = overlayPage.Controls.OfType<TableLayoutPanel>().Single();
+
+            var probeSlider = new DarkSlider { Minimum = 10, Maximum = 90 };
+            probeSlider.Value = 200;
+            var upperClamp = probeSlider.Value;
+            probeSlider.Value = -20;
+
+            return (
+                form.BackColor,
+                form.ForeColor,
+                DarkTabs: 1,
+                SliderCount: sliders.Length,
+                AllSlidersKeyboardReachable: sliders.All(slider => slider.TabStop),
+                AllSlidersShowPercentages: sliders.All(slider => slider.AccessibilityObject.Value?.EndsWith('%') == true),
+                AllSlidersFitThePage: sliders.All(slider => slider.RectangleToScreen(slider.ClientRectangle).Right <= overlayPageRight),
+                SliderRights: sliders.Select(slider => slider.RectangleToScreen(slider.ClientRectangle).Right).ToArray(),
+                OverlayPageRight: overlayPageRight,
+                LayoutDetails: $"page client={overlayPage.ClientSize}, padding={overlayPage.Padding}, content={overlayContent.Bounds}, slider={sliders[0].Bounds}",
+                HasPrimaryButton: buttons.Any(button => button.BackColor == DarkUiTheme.Accent),
+                InputsAreDark: inputs.All(input => input.BackColor == DarkUiTheme.InputBackground),
+                upperClamp,
+                lowerClamp: probeSlider.Value);
+        });
+
+        Assert.Equal(DarkUiTheme.WindowBackground, visualLanguage.BackColor);
+        Assert.Equal(DarkUiTheme.PrimaryText, visualLanguage.ForeColor);
+        Assert.Equal(1, visualLanguage.DarkTabs);
+        Assert.Equal(3, visualLanguage.SliderCount);
+        Assert.True(visualLanguage.AllSlidersKeyboardReachable);
+        Assert.True(visualLanguage.AllSlidersShowPercentages);
+        Assert.True(
+            visualLanguage.AllSlidersFitThePage,
+            $"Slider right edges {string.Join(", ", visualLanguage.SliderRights)} exceed page edge {visualLanguage.OverlayPageRight}; {visualLanguage.LayoutDetails}.");
+        Assert.True(visualLanguage.HasPrimaryButton);
+        Assert.True(visualLanguage.InputsAreDark);
+        Assert.Equal(90, visualLanguage.upperClamp);
+        Assert.Equal(10, visualLanguage.lowerClamp);
     }
 
     [Fact]

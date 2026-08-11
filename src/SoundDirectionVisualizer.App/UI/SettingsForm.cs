@@ -1,9 +1,11 @@
+using SoundDirectionVisualizer.App.Native;
+
 namespace SoundDirectionVisualizer.App.UI;
 
 public sealed class SettingsForm : Form
 {
     private readonly CheckBox _overlayEnabled = new() { Text = "Enable overlay", AutoSize = true };
-    private readonly ComboBox _audioDevice = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly ComboBox _audioDevice = CreateComboBox();
     private readonly CheckBox _useDetectedGameProcessAudio = new()
     {
         Text = "Capture only the detected Steam game's process audio (optional)",
@@ -25,30 +27,17 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _loudSoundEmphasis = new() { Text = "Emphasize loud sounds separately", AutoSize = true };
     private readonly NumericUpDown _loudSoundThreshold = CreateDecimalNumeric(1.1m, 10m, 1, 0.1m);
     private readonly CheckBox _autoDetect = new() { Text = "Automatically target a running Steam game's display", AutoSize = true };
-    private readonly ComboBox _monitor = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly ComboBox _monitor = CreateComboBox();
     private readonly NumericUpDown _scale = CreateIntegerNumeric(10, 200, 5);
     private readonly NumericUpDown _thickness = CreateIntegerNumeric(1, 12);
     private readonly NumericUpDown _markerSize = CreateIntegerNumeric(4, 32);
     private readonly NumericUpDown _ambientMarkerSize = CreateIntegerNumeric(25, 300, 5);
-    private readonly TrackBar _ambientMarkerOpacity = CreatePercentageSlider(10);
-    private readonly Label _ambientMarkerOpacityValue = new() { Text = "40%", AutoSize = true };
+    private readonly DarkSlider _ambientMarkerOpacity = CreatePercentageSlider(10);
     private readonly NumericUpDown _loudMarkerSize = CreateIntegerNumeric(25, 300, 5);
-    private readonly TrackBar _loudMarkerOpacity = CreatePercentageSlider(10);
-    private readonly Label _loudMarkerOpacityValue = new() { Text = "100%", AutoSize = true };
+    private readonly DarkSlider _loudMarkerOpacity = CreatePercentageSlider(10);
     private readonly CheckBox _loudMarkerOutline = new() { Text = "Outline loud markers", AutoSize = true };
     private readonly NumericUpDown _loudMarkerOutlineThickness = CreateDecimalNumeric(0.1m, 8m, 1, 0.1m);
-    private readonly TrackBar _opacitySlider = new()
-    {
-        Minimum = 0,
-        Maximum = 100,
-        TickFrequency = 10,
-        SmallChange = 1,
-        LargeChange = 10,
-        AutoSize = false,
-        Width = 230,
-        Height = 34
-    };
-    private readonly Label _opacityValueLabel = new() { Text = "40%", AutoSize = true };
+    private readonly DarkSlider _opacitySlider = CreatePercentageSlider(0);
     private readonly NumericUpDown _horizontalOffset = CreateIntegerNumeric(-4000, 4000);
     private readonly NumericUpDown _verticalOffset = CreateIntegerNumeric(-4000, 4000);
     private readonly NumericUpDown _trailDuration = CreateDecimalNumeric(0.5m, 15m, 1, 0.5m);
@@ -59,17 +48,21 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _showListenerDot = new() { Text = "Show center listener dot", AutoSize = true };
     private readonly CheckBox _showTrail = new() { Text = "Show fading direction trail", AutoSize = true };
     private readonly CheckBox _showLabels = new() { Text = "Show F / B / L / R labels", AutoSize = true };
-    private readonly Button _colorButton = new() { Text = "Choose...", AutoSize = true };
-    private readonly Panel _colorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
-    private readonly Button _ambientMarkerColorButton = new() { Text = "Choose...", AutoSize = true };
-    private readonly Panel _ambientMarkerColorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
-    private readonly Button _loudMarkerColorButton = new() { Text = "Choose...", AutoSize = true };
-    private readonly Panel _loudMarkerColorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
-    private readonly Button _loudOutlineColorButton = new() { Text = "Choose...", AutoSize = true };
-    private readonly Panel _loudOutlineColorPreview = new() { Width = 48, Height = 22, BorderStyle = BorderStyle.FixedSingle };
-    private readonly HotkeyTextBox _toggleHotkey = new() { Dock = DockStyle.Fill };
-    private readonly HotkeyTextBox _cycleHotkey = new() { Dock = DockStyle.Fill };
-    private readonly HotkeyTextBox _openSettingsHotkey = new() { Dock = DockStyle.Fill };
+    private readonly Button _colorButton = DarkUiTheme.CreateButton("Change", primary: false, 92);
+    private readonly Panel _colorPreview = CreateColorPreview();
+    private readonly Button _ambientMarkerColorButton = DarkUiTheme.CreateButton("Change", primary: false, 92);
+    private readonly Panel _ambientMarkerColorPreview = CreateColorPreview();
+    private readonly Button _loudMarkerColorButton = DarkUiTheme.CreateButton("Change", primary: false, 92);
+    private readonly Panel _loudMarkerColorPreview = CreateColorPreview();
+    private readonly Button _loudOutlineColorButton = DarkUiTheme.CreateButton("Change", primary: false, 92);
+    private readonly Panel _loudOutlineColorPreview = CreateColorPreview();
+    private readonly HotkeyTextBox _toggleHotkey = CreateHotkeyTextBox();
+    private readonly HotkeyTextBox _cycleHotkey = CreateHotkeyTextBox();
+    private readonly HotkeyTextBox _openSettingsHotkey = CreateHotkeyTextBox();
+    private readonly Panel _tabsHost = new();
+    private readonly List<TableLayoutPanel> _contentStacks = [];
+    private readonly List<Label> _wrappingLabels = [];
+    private readonly Icon _windowIcon = LoadWindowIcon();
     private string _selectedColorHex = "#FFFFFF";
     private string _selectedAmbientMarkerColorHex = "#FFFFFF";
     private string _selectedLoudMarkerColorHex = "#FFFFFF";
@@ -78,18 +71,28 @@ public sealed class SettingsForm : Form
 
     public SettingsForm(AppSettings settings)
     {
-        Text = "Sound Direction Visualizer Settings";
+        Text = "Sound Direction Visualizer";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(660, 600);
-        ClientSize = new Size(700, 680);
+        MinimumSize = new Size(720, 620);
+        ClientSize = new Size(920, 780);
         ShowInTaskbar = true;
         MaximizeBox = false;
+        MinimizeBox = false;
         AutoScaleMode = AutoScaleMode.Dpi;
+        BackColor = DarkUiTheme.WindowBackground;
+        ForeColor = DarkUiTheme.PrimaryText;
+        Font = new Font("Segoe UI", 9.25F, FontStyle.Regular, GraphicsUnit.Point);
+        Icon = _windowIcon;
+        ShowIcon = true;
 
         ResultSettings = settings.Clone();
         BuildLayout();
+        DarkUiTheme.ApplyTo(this);
         LoadSettings(settings);
         _isLoading = false;
+
+        Shown += (_, _) => FitToWorkingArea();
+        Resize += (_, _) => UpdateWrappingWidths();
     }
 
     public AppSettings ResultSettings { get; private set; }
@@ -100,21 +103,33 @@ public sealed class SettingsForm : Form
     {
         var root = new TableLayoutPanel
         {
+            BackColor = DarkUiTheme.WindowBackground,
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
-            Padding = new Padding(10)
+            RowCount = 3,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
 
-        var tabs = new TabControl { Dock = DockStyle.Fill };
+        var tabs = new DarkTabControl { Dock = DockStyle.Fill };
         tabs.TabPages.Add(BuildAudioTab());
         tabs.TabPages.Add(BuildOverlayTab());
         tabs.TabPages.Add(BuildTargetingTab());
         tabs.TabPages.Add(BuildHotkeysTab());
-        root.Controls.Add(tabs, 0, 0);
-        root.Controls.Add(BuildButtons(), 0, 1);
+
+        _tabsHost.BackColor = DarkUiTheme.WindowBackground;
+        _tabsHost.Dock = DockStyle.Fill;
+        _tabsHost.Margin = new Padding(18, 0, 18, 0);
+        _tabsHost.Controls.Add(tabs);
+        _tabsHost.ClientSizeChanged += (_, _) => UpdateWrappingWidths();
+        tabs.SelectedIndexChanged += (_, _) => UpdateWrappingWidths();
+
+        root.Controls.Add(BuildHeader(), 0, 0);
+        root.Controls.Add(_tabsHost, 0, 1);
+        root.Controls.Add(BuildFooter(), 0, 2);
         Controls.Add(root);
 
         _autoDetect.CheckedChanged += (_, _) => _monitor.Enabled = !_autoDetect.Checked;
@@ -151,8 +166,8 @@ public sealed class SettingsForm : Form
             numeric.ValueChanged += (_, _) => NotifyOverlayPreviewChanged();
         }
 
-        BindPercentageSlider(_ambientMarkerOpacity, _ambientMarkerOpacityValue);
-        BindPercentageSlider(_loudMarkerOpacity, _loudMarkerOpacityValue);
+        BindPercentageSlider(_ambientMarkerOpacity);
+        BindPercentageSlider(_loudMarkerOpacity);
 
         _overlayEnabled.CheckedChanged += (_, _) => NotifyOverlayPreviewChanged();
         foreach (var toggle in new[]
@@ -168,118 +183,164 @@ public sealed class SettingsForm : Form
         {
             toggle.CheckedChanged += (_, _) => NotifyOverlayPreviewChanged();
         }
+
         _opacitySlider.ValueChanged += (_, _) =>
         {
-            _opacityValueLabel.Text = $"{_opacitySlider.Value}%";
             NotifyOverlayPreviewChanged();
         };
+    }
+
+    private Control BuildHeader()
+    {
+        var header = new TableLayoutPanel
+        {
+            AutoSize = true,
+            BackColor = DarkUiTheme.WindowBackground,
+            ColumnCount = 2,
+            Dock = DockStyle.Top,
+            Margin = Padding.Empty,
+            Padding = new Padding(22, 18, 22, 14)
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var title = new Label
+        {
+            AutoSize = true,
+            Font = new Font(Font.FontFamily, 18F, FontStyle.Bold),
+            ForeColor = DarkUiTheme.PrimaryText,
+            Margin = Padding.Empty,
+            Text = "Sound Direction Visualizer"
+        };
+        var subtitle = CreateWrappingLabel(
+            "Tune audio analysis, overlay appearance, display targeting, and global shortcuts.",
+            DarkUiTheme.SecondaryText);
+        subtitle.Margin = new Padding(0, 4, 0, 0);
+
+        var livePreview = new Label
+        {
+            AutoSize = true,
+            BorderStyle = BorderStyle.FixedSingle,
+            ForeColor = DarkUiTheme.Accent,
+            Margin = new Padding(18, 5, 0, 0),
+            Padding = new Padding(9, 5, 9, 5),
+            Text = "LIVE OVERLAY PREVIEW"
+        };
+
+        header.Controls.Add(title, 0, 0);
+        header.Controls.Add(subtitle, 0, 1);
+        header.Controls.Add(livePreview, 1, 0);
+        header.SetRowSpan(livePreview, 2);
+        return header;
     }
 
     private TabPage BuildAudioTab()
     {
         var page = CreateTab("Audio");
-        var layout = CreateTwoColumnTable();
-        AddWideRow(layout, _useDetectedGameProcessAudio);
-        AddWideRow(layout, _automaticallyFallbackToGameProcessAudio);
-        AddRow(layout, "Output device", _audioDevice);
-        AddWideRow(layout, _automaticAudioCalibration);
-        AddRow(layout, "Silence threshold (RMS)", _silenceThreshold);
-        AddRow(layout, "Smoothing factor", _smoothing);
-        AddRow(layout, "Manual hard-pan balance", _modelBalance);
-        AddWideRow(layout, _loudSoundEmphasis);
-        AddRow(layout, "Loud sound threshold (× ambience)", _loudSoundThreshold);
-        AddWideRow(layout, CreateNote(
-            "By default, audio is captured from the selected Windows output device. If the default device stays silent, the app occasionally " +
-            "checks other active stereo output devices and temporarily follows one carrying audio. Optional game-process capture can preserve " +
-            "stereo direction when a headset or spatial-audio driver exposes only dual mono at its physical output loopback. When the automatic fallback is enabled, " +
-            "the app also tries game-process capture if audible output remains centered for eight seconds while a Steam game is running. Both modes require exactly two channels."));
-        AddWideRow(layout, CreateNote(
-            "Automatic calibration scales the silence gate, normalizes each source's usual stereo width toward a consistent lateral angle, and adds immediate headroom for wider transient sounds. " +
-            "Disable it only when using the manual silence threshold and hard-pan balance values."));
-        AddWideRow(layout, CreateNote(
-            "Loud-sound detection compares the current combined level with the median recent ambience. " +
-            "A larger multiplier marks fewer sounds as loud."));
-        AddWideRow(layout, CreateNote(
-            "Stereo identifies left/right balance, but cannot distinguish front from back. The overlay therefore shows both valid candidates."));
-        page.Controls.Add(layout);
+        var content = CreateContentStack();
+
+        var sourceCard = CreateCard(
+            "Audio source",
+            "Listen to one explicit stereo source at a time. The default endpoint follows the Windows multimedia output.");
+        AddRow(sourceCard, "Output device", _audioDevice);
+        AddWideRow(sourceCard, _useDetectedGameProcessAudio);
+        AddWideRow(sourceCard, _automaticallyFallbackToGameProcessAudio);
+        AddWideRow(sourceCard, CreateNote(
+            "Game-process capture can preserve stereo direction when a headset or spatial-audio driver exposes only dual mono at the physical output. " +
+            "The automatic fallback tries it after eight seconds of audible centered output while a Steam game is running."));
+        AddContent(content, sourceCard);
+
+        var analysisCard = CreateCard(
+            "Direction analysis",
+            "Automatic calibration is the recommended path. Manual controls remain available for known, stable audio pipelines.");
+        AddWideRow(analysisCard, _automaticAudioCalibration);
+        AddRow(analysisCard, "Silence threshold (RMS)", _silenceThreshold);
+        AddRow(analysisCard, "Smoothing factor", _smoothing);
+        AddRow(analysisCard, "Manual hard-pan balance", _modelBalance);
+        AddWideRow(analysisCard, _loudSoundEmphasis);
+        AddRow(analysisCard, "Loud sound threshold (× ambience)", _loudSoundThreshold);
+        AddWideRow(analysisCard, CreateNote(
+            "Automatic calibration adapts the silence gate and usual stereo width. Loud-sound emphasis compares each frame with the recent ambience median; " +
+            "a larger multiplier marks fewer sounds as loud."));
+        AddContent(content, analysisCard);
+
+        AddContent(content, CreateInfoCard(
+            "Stereo uncertainty",
+            "Stereo identifies left/right balance but normally cannot distinguish front from back. The overlay intentionally shows both mathematically valid candidates."));
+
+        page.Controls.Add(content);
         return page;
     }
 
     private TabPage BuildOverlayTab()
     {
         var page = CreateTab("Overlay");
-        var layout = CreateTwoColumnTable();
-        AddWideRow(layout, _overlayEnabled);
+        var content = CreateContentStack();
 
-        var colorPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        colorPanel.Controls.Add(_colorPreview);
-        colorPanel.Controls.Add(_colorButton);
-        AddRow(layout, "Compass / ray / label color", colorPanel);
+        var appearanceCard = CreateCard(
+            "Global appearance",
+            "These settings apply to the complete visualizer and update the overlay while you edit.");
+        AddWideRow(appearanceCard, _overlayEnabled);
+        AddRow(appearanceCard, "Compass, ray, and label color", CreateColorPanel(_colorPreview, _colorButton));
+        AddRow(appearanceCard, "Opacity", _opacitySlider);
+        AddRow(appearanceCard, "Size (% of display height)", _scale);
+        AddRow(appearanceCard, "Line thickness (px)", _thickness);
+        AddRow(appearanceCard, "Base marker size (px)", _markerSize);
+        AddRow(appearanceCard, "Horizontal offset (px)", _horizontalOffset);
+        AddRow(appearanceCard, "Vertical offset (px)", _verticalOffset);
+        AddWideRow(appearanceCard, CreateNote(
+            "Size scales the ring, lines, markers, labels, and padding together. Offsets are relative to the target display center; positive Y moves the overlay down."));
+        AddContent(content, appearanceCard);
 
-        var opacityPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        opacityPanel.Controls.Add(_opacitySlider);
-        opacityPanel.Controls.Add(_opacityValueLabel);
-        AddRow(layout, "Opacity", opacityPanel);
-        AddRow(layout, "Size (% of display height)", _scale);
-        AddRow(layout, "Line thickness (px)", _thickness);
-        AddRow(layout, "Base marker size (px)", _markerSize);
-        AddRow(layout, "Horizontal offset (px)", _horizontalOffset);
-        AddRow(layout, "Vertical offset (px)", _verticalOffset);
-        AddWideRow(layout, CreateNote(
-            "The default size is 110% of the target display height. " +
-            "Size changes the ring, lines, markers, and labels together. " +
-            "Offsets are relative to the target display center; positive Y moves the visualizer down. Changes are previewed live."));
-        AddWideRow(layout, BuildAmbientMarkerGroup());
-        AddWideRow(layout, BuildLoudMarkerGroup());
-        AddWideRow(layout, CreateNote(
-            "Size is relative to the base marker size. The same type-specific appearance is used by current and trail markers; " +
-            "trail age still shrinks and fades both types. Marker opacity is relative to the overlay's global opacity."));
-        AddWideRow(layout, new Label
-        {
-            Text = "Visible elements",
-            AutoSize = true,
-            Font = new Font(Font, FontStyle.Bold)
-        });
-        AddWideRow(layout, _showRing);
-        AddWideRow(layout, _showTicks);
-        AddWideRow(layout, _showCurrentRays);
-        AddWideRow(layout, _showCurrentMarkers);
-        AddWideRow(layout, _showListenerDot);
-        AddWideRow(layout, _showTrail);
-        AddRow(layout, "Trail duration (seconds)", _trailDuration);
-        AddWideRow(layout, _showLabels);
-        page.Controls.Add(layout);
+        AddContent(content, BuildAmbientMarkerGroup());
+        AddContent(content, BuildLoudMarkerGroup());
+        AddContent(content, CreateInfoCard(
+            "Marker layers",
+            "Size is relative to the base marker size. Current and delayed markers share the same type-specific styling, while trail age still shrinks and fades them. " +
+            "Marker opacity is relative to the overlay's global opacity."));
+
+        var elementsCard = CreateCard(
+            "Visible elements",
+            "Build the visualizer from independent layers. Hidden layers retain their settings.");
+        AddWideRow(elementsCard, BuildElementToggleGrid());
+        AddRow(elementsCard, "Trail duration (seconds)", _trailDuration);
+        AddContent(content, elementsCard);
+
+        page.Controls.Add(content);
         return page;
     }
 
     private TabPage BuildTargetingTab()
     {
         var page = CreateTab("Target display");
-        var layout = CreateTwoColumnTable();
-        AddWideRow(layout, _autoDetect);
-        AddRow(layout, "Manual display", _monitor);
-        AddWideRow(layout, CreateNote(
-            "Auto targeting first checks the foreground window, verifies that its executable is inside a Steam library, " +
-            "and uses that window's display. A recently detected valid game window is retained; otherwise the selected display remains in use."));
-        AddWideRow(layout, CreateNote(
-            "The overlay is intended for borderless-windowed games. Exclusive fullscreen and some anti-cheat/protected overlays can block it."));
-        page.Controls.Add(layout);
+        var content = CreateContentStack();
+
+        var targetCard = CreateCard(
+            "Display targeting",
+            "Follow a detected Steam game automatically or pin the overlay to a specific display.");
+        AddWideRow(targetCard, _autoDetect);
+        AddRow(targetCard, "Manual display", _monitor);
+        AddWideRow(targetCard, CreateNote(
+            "Automatic targeting verifies that the foreground executable is inside a Steam library and follows its display. " +
+            "When no valid game is detected, the current display remains selected."));
+        AddContent(content, targetCard);
+
+        AddContent(content, CreateInfoCard(
+            "Game display mode",
+            "The overlay works best with borderless-windowed games. Exclusive fullscreen and some anti-cheat or protected presentation paths can prevent third-party topmost windows from appearing."));
+
+        page.Controls.Add(content);
         return page;
     }
 
     private GroupBox BuildAmbientMarkerGroup()
     {
         var group = CreateSettingsGroup("Ambient markers");
-        var layout = CreateTwoColumnTable();
+        var layout = CreateTwoColumnTable(DarkUiTheme.CardBackground);
+        layout.Font = Font;
         AddRow(layout, "Size (% of base)", _ambientMarkerSize);
-        AddRow(
-            layout,
-            "Opacity",
-            CreatePercentageSliderPanel(_ambientMarkerOpacity, _ambientMarkerOpacityValue));
-        AddRow(
-            layout,
-            "Fill color",
-            CreateColorPanel(_ambientMarkerColorPreview, _ambientMarkerColorButton));
+        AddRow(layout, "Opacity", _ambientMarkerOpacity);
+        AddRow(layout, "Fill color", CreateColorPanel(_ambientMarkerColorPreview, _ambientMarkerColorButton));
         group.Controls.Add(layout);
         return group;
     }
@@ -287,21 +348,13 @@ public sealed class SettingsForm : Form
     private GroupBox BuildLoudMarkerGroup()
     {
         var group = CreateSettingsGroup("Loud markers");
-        var layout = CreateTwoColumnTable();
+        var layout = CreateTwoColumnTable(DarkUiTheme.CardBackground);
+        layout.Font = Font;
         AddRow(layout, "Size (% of base)", _loudMarkerSize);
-        AddRow(
-            layout,
-            "Opacity",
-            CreatePercentageSliderPanel(_loudMarkerOpacity, _loudMarkerOpacityValue));
-        AddRow(
-            layout,
-            "Fill color",
-            CreateColorPanel(_loudMarkerColorPreview, _loudMarkerColorButton));
+        AddRow(layout, "Opacity", _loudMarkerOpacity);
+        AddRow(layout, "Fill color", CreateColorPanel(_loudMarkerColorPreview, _loudMarkerColorButton));
         AddWideRow(layout, _loudMarkerOutline);
-        AddRow(
-            layout,
-            "Outline color",
-            CreateColorPanel(_loudOutlineColorPreview, _loudOutlineColorButton));
+        AddRow(layout, "Outline color", CreateColorPanel(_loudOutlineColorPreview, _loudOutlineColorButton));
         AddRow(layout, "Outline thickness (px)", _loudMarkerOutlineThickness);
         group.Controls.Add(layout);
         return group;
@@ -310,32 +363,101 @@ public sealed class SettingsForm : Form
     private TabPage BuildHotkeysTab()
     {
         var page = CreateTab("Hotkeys");
-        var layout = CreateTwoColumnTable();
-        AddRow(layout, "Toggle overlay", _toggleHotkey);
-        AddRow(layout, "Cycle displays", _cycleHotkey);
-        AddRow(layout, "Open settings", _openSettingsHotkey);
-        AddWideRow(layout, CreateNote("Focus a field and press a key combination. Press Delete to clear an optional binding."));
-        page.Controls.Add(layout);
+        var content = CreateContentStack();
+
+        var hotkeysCard = CreateCard(
+            "Global shortcuts",
+            "Shortcuts work while another application or game has focus.");
+        AddRow(hotkeysCard, "Toggle overlay", _toggleHotkey);
+        AddRow(hotkeysCard, "Cycle displays", _cycleHotkey);
+        AddRow(hotkeysCard, "Open settings", _openSettingsHotkey);
+        AddWideRow(hotkeysCard, CreateNote(
+            "Focus a shortcut field and press a key combination. Press Delete to clear an optional binding. The overlay toggle remains required."));
+        AddContent(content, hotkeysCard);
+
+        page.Controls.Add(content);
         return page;
     }
 
-    private FlowLayoutPanel BuildButtons()
+    private Control BuildElementToggleGrid()
     {
-        var panel = new FlowLayoutPanel
+        var toggles = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
             AutoSize = true,
-            FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(0, 10, 0, 0)
+            BackColor = DarkUiTheme.CardBackground,
+            ColumnCount = 2,
+            Dock = DockStyle.Top,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
         };
-        var save = new Button { Text = "Save", DialogResult = DialogResult.None, AutoSize = true };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+        toggles.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        toggles.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+
+        var controls = new[]
+        {
+            _showRing,
+            _showTicks,
+            _showCurrentRays,
+            _showCurrentMarkers,
+            _showListenerDot,
+            _showTrail,
+            _showLabels
+        };
+        for (var index = 0; index < controls.Length; index++)
+        {
+            var row = index / 2;
+            while (toggles.RowCount <= row)
+            {
+                toggles.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                toggles.RowCount++;
+            }
+
+            controls[index].Margin = new Padding(0, 5, 18, 5);
+            toggles.Controls.Add(controls[index], index % 2, row);
+        }
+
+        return toggles;
+    }
+
+    private Control BuildFooter()
+    {
+        var footer = new Panel
+        {
+            BackColor = DarkUiTheme.CardBackground,
+            Dock = DockStyle.Fill,
+            Padding = new Padding(18, 13, 18, 12)
+        };
+        var previewNote = new Label
+        {
+            AutoSize = true,
+            Dock = DockStyle.Left,
+            ForeColor = DarkUiTheme.SecondaryText,
+            Padding = new Padding(2, 8, 0, 0),
+            Text = "Overlay appearance is previewed live. Save keeps the changes."
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            BackColor = DarkUiTheme.CardBackground,
+            Dock = DockStyle.Right,
+            FlowDirection = FlowDirection.RightToLeft,
+            Margin = Padding.Empty,
+            WrapContents = false
+        };
+
+        var save = DarkUiTheme.CreateButton("Save", primary: true, 104);
+        var cancel = DarkUiTheme.CreateButton("Cancel", primary: false, 104);
         save.Click += (_, _) => SaveAndClose();
-        panel.Controls.Add(save);
-        panel.Controls.Add(cancel);
+        cancel.Click += (_, _) => Close();
+        buttons.Controls.Add(save);
+        buttons.Controls.Add(cancel);
+        footer.Controls.Add(buttons);
+        footer.Controls.Add(previewNote);
+
         AcceptButton = save;
         CancelButton = cancel;
-        return panel;
+        cancel.DialogResult = DialogResult.Cancel;
+        return footer;
     }
 
     private void LoadSettings(AppSettings source)
@@ -379,18 +501,15 @@ public sealed class SettingsForm : Form
         _selectedColorHex = settings.OverlayColorHex;
         _colorPreview.BackColor = settings.GetOverlayColor();
         _opacitySlider.Value = settings.OverlayOpacityPercent;
-        _opacityValueLabel.Text = $"{settings.OverlayOpacityPercent}%";
         _scale.Value = settings.OverlayHeightPercent;
         _thickness.Value = settings.RingThickness;
         _markerSize.Value = settings.MarkerSize;
         _ambientMarkerSize.Value = settings.AmbientMarkerSizePercent;
         _ambientMarkerOpacity.Value = settings.AmbientMarkerOpacityPercent;
-        _ambientMarkerOpacityValue.Text = $"{settings.AmbientMarkerOpacityPercent}%";
         _selectedAmbientMarkerColorHex = settings.AmbientMarkerColorHex;
         _ambientMarkerColorPreview.BackColor = settings.GetAmbientMarkerColor();
         _loudMarkerSize.Value = settings.LoudMarkerSizePercent;
         _loudMarkerOpacity.Value = settings.LoudMarkerOpacityPercent;
-        _loudMarkerOpacityValue.Text = $"{settings.LoudMarkerOpacityPercent}%";
         _selectedLoudMarkerColorHex = settings.LoudMarkerColorHex;
         _loudMarkerColorPreview.BackColor = settings.GetLoudMarkerColor();
         _loudMarkerOutline.Checked = settings.LoudMarkerOutlineEnabled;
@@ -428,7 +547,7 @@ public sealed class SettingsForm : Form
             return;
         }
 
-        _selectedColorHex = $"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}";
+        _selectedColorHex = ToColorHex(dialog.Color);
         _colorPreview.BackColor = dialog.Color;
         NotifyOverlayPreviewChanged();
     }
@@ -446,7 +565,7 @@ public sealed class SettingsForm : Form
             return;
         }
 
-        _selectedLoudOutlineColorHex = $"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}";
+        _selectedLoudOutlineColorHex = ToColorHex(dialog.Color);
         _loudOutlineColorPreview.BackColor = dialog.Color;
         NotifyOverlayPreviewChanged();
     }
@@ -576,31 +695,193 @@ public sealed class SettingsForm : Form
         _loudSoundThreshold.Enabled = enabled;
         _loudMarkerSize.Enabled = enabled;
         _loudMarkerOpacity.Enabled = enabled;
-        _loudMarkerOpacityValue.Enabled = enabled;
         _loudMarkerColorButton.Enabled = enabled;
         _loudMarkerColorPreview.Enabled = enabled;
         _loudMarkerOutline.Enabled = enabled;
         UpdateLoudMarkerOutlineControls();
     }
 
+    private void FitToWorkingArea()
+    {
+        var workingArea = Screen.FromControl(this).WorkingArea;
+        var targetWidth = Math.Min(980, Math.Max(MinimumSize.Width, workingArea.Width - 48));
+        var targetHeight = Math.Min(920, Math.Max(MinimumSize.Height, workingArea.Height - 48));
+        Size = new Size(targetWidth, targetHeight);
+        CenterToScreen();
+        UpdateWrappingWidths();
+    }
+
+    private void UpdateWrappingWidths()
+    {
+        var maximumLabelWidth = Math.Max(300, _tabsHost.ClientSize.Width - 150);
+        foreach (var label in _wrappingLabels)
+        {
+            label.MaximumSize = new Size(maximumLabelWidth, 0);
+        }
+
+        foreach (var content in _contentStacks)
+        {
+            if (content.Parent is not TabPage page)
+            {
+                continue;
+            }
+
+            var contentWidth = Math.Max(
+                320,
+                page.ClientSize.Width - page.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 3);
+            content.MinimumSize = new Size(contentWidth, 0);
+            content.MaximumSize = new Size(contentWidth, 0);
+
+            foreach (Control contentItem in content.Controls)
+            {
+                var itemWidth = Math.Max(280, contentWidth - content.Padding.Horizontal);
+                contentItem.MinimumSize = new Size(itemWidth, 0);
+                contentItem.MaximumSize = new Size(itemWidth, 0);
+            }
+        }
+    }
+
+    protected override void OnHandleCreated(EventArgs eventArgs)
+    {
+        base.OnHandleCreated(eventArgs);
+        var darkModeEnabled = 1;
+        const int useImmersiveDarkMode = 20;
+        const int useImmersiveDarkModeBefore20H1 = 19;
+        if (NativeMethods.DwmSetWindowAttribute(
+                Handle,
+                useImmersiveDarkMode,
+                ref darkModeEnabled,
+                sizeof(int)) != 0)
+        {
+            NativeMethods.DwmSetWindowAttribute(
+                Handle,
+                useImmersiveDarkModeBefore20H1,
+                ref darkModeEnabled,
+                sizeof(int));
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _windowIcon.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
     private static TabPage CreateTab(string text) => new(text)
     {
-        Padding = new Padding(14),
-        AutoScroll = true
+        AutoScroll = true,
+        BackColor = DarkUiTheme.WindowBackground,
+        ForeColor = DarkUiTheme.PrimaryText,
+        Padding = new Padding(16),
+        UseVisualStyleBackColor = false
     };
 
-    private static TableLayoutPanel CreateTwoColumnTable()
+    private TableLayoutPanel CreateContentStack()
+    {
+        var content = new TableLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = DarkUiTheme.WindowBackground,
+            ColumnCount = 1,
+            Dock = DockStyle.Top,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 2, 0, 8)
+        };
+        _contentStacks.Add(content);
+        return content;
+    }
+
+    private TableLayoutPanel CreateCard(string title, string description)
+    {
+        var card = CreateTwoColumnTable(DarkUiTheme.CardBackground);
+        card.Margin = new Padding(0, 0, 0, 12);
+        card.Padding = new Padding(16, 14, 16, 16);
+
+        var titleLabel = new Label
+        {
+            AutoSize = true,
+            Font = new Font(Font, FontStyle.Bold),
+            ForeColor = DarkUiTheme.PrimaryText,
+            Margin = Padding.Empty,
+            Text = title
+        };
+        AddWideRow(card, titleLabel, new Padding(0, 0, 0, 2));
+
+        var descriptionLabel = CreateWrappingLabel(description, DarkUiTheme.SecondaryText);
+        AddWideRow(card, descriptionLabel, new Padding(0, 0, 0, 10));
+        return card;
+    }
+
+    private Control CreateInfoCard(string title, string text)
+    {
+        var card = new TableLayoutPanel
+        {
+            AutoSize = true,
+            BackColor = DarkUiTheme.RaisedBackground,
+            ColumnCount = 2,
+            Dock = DockStyle.Top,
+            Margin = new Padding(0, 0, 0, 12),
+            Padding = new Padding(0)
+        };
+        card.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 4));
+        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        var accent = new Panel
+        {
+            BackColor = DarkUiTheme.Accent,
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty
+        };
+        var body = new TableLayoutPanel
+        {
+            AutoSize = true,
+            BackColor = DarkUiTheme.RaisedBackground,
+            ColumnCount = 1,
+            Dock = DockStyle.Top,
+            Margin = Padding.Empty,
+            Padding = new Padding(14, 12, 14, 13)
+        };
+        body.Controls.Add(new Label
+        {
+            AutoSize = true,
+            Font = new Font(Font, FontStyle.Bold),
+            ForeColor = DarkUiTheme.Accent,
+            Margin = new Padding(0, 0, 0, 3),
+            Text = title
+        });
+        body.Controls.Add(CreateWrappingLabel(text, DarkUiTheme.SecondaryText));
+        card.Controls.Add(accent, 0, 0);
+        card.Controls.Add(body, 1, 0);
+        return card;
+    }
+
+    private static TableLayoutPanel CreateTwoColumnTable(Color background)
     {
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Top,
             AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = background,
             ColumnCount = 2,
-            Padding = new Padding(4)
+            Dock = DockStyle.Top,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 39));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 61));
         return layout;
+    }
+
+    private static void AddContent(TableLayoutPanel layout, Control control)
+    {
+        var row = layout.RowCount++;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.Controls.Add(control, 0, row);
     }
 
     private static void AddRow(TableLayoutPanel layout, string labelText, Control control)
@@ -612,77 +893,131 @@ public sealed class SettingsForm : Form
             Text = labelText,
             AutoSize = true,
             Anchor = AnchorStyles.Left,
-            Margin = new Padding(3, 9, 12, 9)
+            ForeColor = DarkUiTheme.PrimaryText,
+            Margin = new Padding(0, 9, 14, 9)
         };
-        control.Margin = new Padding(3, 5, 3, 5);
+        control.Margin = new Padding(0, 5, 0, 5);
         layout.Controls.Add(label, 0, row);
         layout.Controls.Add(control, 1, row);
     }
 
-    private static void AddWideRow(TableLayoutPanel layout, Control control)
+    private static void AddWideRow(TableLayoutPanel layout, Control control) =>
+        AddWideRow(layout, control, new Padding(0, 7, 0, 7));
+
+    private static void AddWideRow(TableLayoutPanel layout, Control control, Padding margin)
     {
         var row = layout.RowCount++;
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        control.Margin = new Padding(3, 8, 3, 8);
+        control.Margin = margin;
         layout.Controls.Add(control, 0, row);
         layout.SetColumnSpan(control, 2);
     }
 
-    private static Label CreateNote(string text) => new()
+    private Label CreateNote(string text)
     {
-        Text = text,
-        AutoSize = true,
-        MaximumSize = new Size(590, 0),
-        ForeColor = SystemColors.GrayText
-    };
+        var label = CreateWrappingLabel(text, DarkUiTheme.SecondaryText);
+        label.Padding = new Padding(0, 2, 0, 0);
+        return label;
+    }
 
-    private static GroupBox CreateSettingsGroup(string text) => new()
+    private Label CreateWrappingLabel(string text, Color color)
+    {
+        var label = new Label
+        {
+            AutoSize = true,
+            ForeColor = color,
+            MaximumSize = new Size(760, 0),
+            Text = text
+        };
+        _wrappingLabels.Add(label);
+        return label;
+    }
+
+    private static GroupBox CreateSettingsGroup(string text) => new DarkGroupBox
     {
         Text = text,
         AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
         Dock = DockStyle.Top,
-        Padding = new Padding(8)
+        Font = new Font("Segoe UI", 9.25F, FontStyle.Bold, GraphicsUnit.Point),
+        Margin = new Padding(0, 0, 0, 12),
+        Padding = new Padding(16, 28, 16, 16)
     };
 
     private static FlowLayoutPanel CreateColorPanel(Panel preview, Button button)
     {
-        var panel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        var panel = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            BackColor = DarkUiTheme.CardBackground,
+            Margin = Padding.Empty,
+            WrapContents = false
+        };
+        preview.Margin = new Padding(0, 3, 10, 3);
+        button.Margin = Padding.Empty;
         panel.Controls.Add(preview);
         panel.Controls.Add(button);
         return panel;
     }
 
-    private static FlowLayoutPanel CreatePercentageSliderPanel(TrackBar slider, Label valueLabel)
-    {
-        var panel = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        valueLabel.Margin = new Padding(3, 8, 3, 3);
-        panel.Controls.Add(slider);
-        panel.Controls.Add(valueLabel);
-        return panel;
-    }
-
-    private void BindPercentageSlider(TrackBar slider, Label valueLabel)
+    private void BindPercentageSlider(DarkSlider slider)
     {
         slider.ValueChanged += (_, _) =>
         {
-            valueLabel.Text = $"{slider.Value}%";
             NotifyOverlayPreviewChanged();
         };
     }
 
-    private static TrackBar CreatePercentageSlider(int minimum) => new()
+    private static ComboBox CreateComboBox() => new()
     {
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Dock = DockStyle.Fill,
+        Height = 31
+    };
+
+    private static DarkSlider CreatePercentageSlider(int minimum) => new()
+    {
+        Dock = DockStyle.Fill,
         Minimum = minimum,
         Maximum = 100,
-        TickFrequency = 10,
         SmallChange = 1,
-        LargeChange = 10,
+        LargeChange = 10
+    };
+
+    private static Panel CreateColorPreview() => new()
+    {
+        BackColor = Color.White,
+        BorderStyle = BorderStyle.FixedSingle,
+        Height = 30,
+        Width = 54
+    };
+
+    private static HotkeyTextBox CreateHotkeyTextBox() => new()
+    {
         AutoSize = false,
-        Width = 230,
-        Height = 34
+        Dock = DockStyle.Fill,
+        Height = 31,
+        TextAlign = HorizontalAlignment.Center
     };
 
     private static string ToColorHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    private static Icon LoadWindowIcon()
+    {
+        try
+        {
+            var extracted = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            if (extracted is not null)
+            {
+                return (Icon)extracted.Clone();
+            }
+        }
+        catch
+        {
+        }
+
+        return (Icon)SystemIcons.Application.Clone();
+    }
 
     private static NumericUpDown CreateIntegerNumeric(
         int minimum,
@@ -693,7 +1028,7 @@ public sealed class SettingsForm : Form
             Maximum = maximum,
             Increment = increment,
             Dock = DockStyle.Left,
-            Width = 120
+            Width = 132
         };
 
     private static NumericUpDown CreateDecimalNumeric(
@@ -707,7 +1042,7 @@ public sealed class SettingsForm : Form
             DecimalPlaces = decimalPlaces,
             Increment = increment,
             Dock = DockStyle.Left,
-            Width = 120
+            Width = 132
         };
 
     private sealed record DisplayOption(string DeviceName, string Label)

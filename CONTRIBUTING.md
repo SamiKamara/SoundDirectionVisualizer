@@ -19,6 +19,19 @@ dotnet test .\SoundDirectionVisualizer.sln --configuration Release --no-build
 
 For overlay, targeting, hotkey, settings, or audio-device changes, also complete the relevant items in [docs/TESTING.md](docs/TESTING.md).
 
+## Local desktop build synchronization
+
+When a task produces a new runnable build on a development machine, the final validated build must replace every local copy used to launch the application, not only `bin\Release`:
+
+1. Record the exact executable paths of any running Sound Direction Visualizer instances.
+2. Complete the Release build and tests, then create the standard self-contained build with `scripts\publish-win-x64.ps1`.
+3. Resolve every desktop shortcut that targets `SoundDirectionVisualizer.exe` and deploy the same final build to each verified target path. This includes shortcut targets outside the repository.
+4. Stop only verified instances when their executable must be replaced. Preserve `%AppData%\SoundDirectionVisualizer\settings.json`.
+5. Relaunch only the executable locations that were running before the update, using their matching shortcuts when available.
+6. Verify target timestamps or hashes and the executable paths of the restarted processes before reporting completion. Retry transient file locks instead of treating a failed publish as successful.
+
+Generated publish output remains local and must not be committed.
+
 ## Commit scope
 
 Keep audio math, platform integration, UI, and documentation changes separable when practical. Generated `bin`, `obj`, `artifacts`, and `TestResults` output must not be committed.

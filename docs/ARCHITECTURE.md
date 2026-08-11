@@ -33,6 +33,8 @@ Targets `net9.0-windows` with WinForms.
 - `SoundDirectionVisualizerApplicationContext` coordinates audio, overlay, tray UI, hotkeys, settings, display changes, and app lifetime.
 - `SettingsStore` persists normalized JSON settings under `%AppData%`.
 
+The settings surface uses a dark, card-based WinForms visual system with a cyan accent derived from the application icon. Audio, overlay, targeting, and hotkey controls remain separated into tabs; the notification-area menu uses the same palette. The visual theme does not change the overlay window styles or the deterministic analysis boundary.
+
 ### `SoundDirectionVisualizer.Core.Tests`
 
 Exercises direction mapping, silence behavior, sample decoding, stereo-only rejection, and trail expiry.

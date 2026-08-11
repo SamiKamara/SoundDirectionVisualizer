@@ -93,6 +93,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
             new ToolStripSeparator(),
             settingsMenuItem,
             exitMenuItem);
+        ConfigureTrayMenu();
 
         _notifyIcon = new NotifyIcon
         {
@@ -759,12 +760,33 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
             var item = new ToolStripMenuItem(
                 DisplayInfoFormatter.ToDisplayLabel(screen),
                 null,
-                (_, _) => SelectManualMonitor(screen.DeviceName));
+                (_, _) => SelectManualMonitor(screen.DeviceName))
+            {
+                ForeColor = DarkUiTheme.PrimaryText
+            };
             _monitorMenuItems[screen.DeviceName] = item;
             _monitorsMenuItem.DropDownItems.Add(item);
         }
 
+        _monitorsMenuItem.DropDown.BackColor = DarkUiTheme.CardBackground;
+        _monitorsMenuItem.DropDown.ForeColor = DarkUiTheme.PrimaryText;
+        _monitorsMenuItem.DropDown.Renderer = _trayMenu.Renderer;
+
         UpdateMenuState();
+    }
+
+    private void ConfigureTrayMenu()
+    {
+        _trayMenu.BackColor = DarkUiTheme.CardBackground;
+        _trayMenu.ForeColor = DarkUiTheme.PrimaryText;
+        _trayMenu.Renderer = new ToolStripProfessionalRenderer(new DarkToolStripColorTable());
+        _trayMenu.ShowCheckMargin = true;
+        _trayMenu.ShowImageMargin = false;
+
+        foreach (ToolStripItem item in _trayMenu.Items)
+        {
+            item.ForeColor = DarkUiTheme.PrimaryText;
+        }
     }
 
     private void UpdateMenuState()

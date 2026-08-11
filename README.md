@@ -11,6 +11,7 @@ The first version deliberately supports **stereo output only**. Stereo provides 
 - Adaptive loud-sound classification relative to recent ambience, with separately styled current and delayed markers
 - Optional manual smoothing, silence-threshold, and hard-pan calibration controls
 - Click-through, always-on-top compass overlay with current rays and a fading history trail
+- Responsive dark-mode settings window and matching notification-area menu, styled around the application's cyan compass identity
 - Live-previewed overlay appearance plus independent ambient/loud marker size, fill color, percentage opacity, labels, position, and history duration
 - Independent visibility toggles for the compass ring, cardinal ticks, current rays, current markers, listener dot, history trail, and F/B/L/R labels
 - Automatic display targeting for a detected Steam game window

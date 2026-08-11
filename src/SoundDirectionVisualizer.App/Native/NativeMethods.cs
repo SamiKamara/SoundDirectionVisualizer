@@ -69,6 +69,13 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool UnregisterHotKey(IntPtr windowHandle, int id);
 
+    [DllImport("dwmapi.dll")]
+    internal static extern int DwmSetWindowAttribute(
+        IntPtr windowHandle,
+        int attribute,
+        ref int attributeValue,
+        int attributeSize);
+
     internal delegate void WinEventProc(
         IntPtr hook,
         uint eventType,
