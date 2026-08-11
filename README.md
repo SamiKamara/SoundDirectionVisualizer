@@ -40,6 +40,12 @@ The release is a self-contained, single-file executable. It does not require a s
 
 Optional direct game-process capture requires Windows 10 version 2004 (build 19041) or newer. On older Windows versions, or if direct activation fails, the application automatically uses the selected stereo output endpoint instead.
 
+## Planned best-available audio path
+
+The next planned audio phase is an automatic, opportunistic multichannel process-capture path for detected games. It will try to obtain useful standard 7.1 or 5.1 channel data through Windows process loopback without requiring a virtual device, driver, physical surround hardware, or mandatory Windows setting changes. A negotiated multichannel format alone will not be treated as proof of additional direction information: the application must recognize the channel layout and observe useful independent side or rear content before presenting a more precise result.
+
+The current stereo process/endpoint capture and its explicit front/back ambiguity will remain the automatic fallback whenever multichannel activation, layout recognition, or content validation does not provide a trustworthy improvement. Users may be shown an optional recommendation to enable a Windows spatial-sound format on stereo hardware because it can make multichannel game output available in some configurations, but declining that recommendation must not prevent normal operation. Later native-surround-endpoint and virtual-device work will reuse this best-available analysis path rather than replacing the zero-setup stereo experience. See [docs/ROADMAP.md](docs/ROADMAP.md) for the planned order.
+
 ## Run from source
 
 ```powershell
@@ -138,7 +144,7 @@ Report security vulnerabilities privately according to [SECURITY.md](SECURITY.md
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes components and runtime flow.
 - [docs/AUDIO-MODEL.md](docs/AUDIO-MODEL.md) defines the stereo math and its limitations.
-- [docs/ROADMAP.md](docs/ROADMAP.md) records planned multichannel and virtual-device research.
+- [docs/ROADMAP.md](docs/ROADMAP.md) records the planned automatic best-available capture path, broader multichannel support, and optional virtual-device research.
 - [docs/TESTING.md](docs/TESTING.md) defines automated and manual verification.
 - [docs/RELEASING.md](docs/RELEASING.md) defines the tagged GitHub Release process.
 - [CONTRIBUTING.md](CONTRIBUTING.md) explains the change discipline.

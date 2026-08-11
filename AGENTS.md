@@ -7,7 +7,7 @@
 - Preserve explicit stereo front/back ambiguity; do not invent precision not supported by the input.
 - Do not silently process only the first two channels of a multichannel endpoint.
 - Preserve overlay click-through and no-activation window styles.
-- Run Release build and tests before handing off changes.
+- Run a Release build and tests before handing off changes that can affect compiled or published application output, test assemblies, dependencies, runtime assets, project/build configuration, or build/publish behavior. Documentation-only, repository-policy-only, and other metadata-only changes that cannot affect runnable or test output do not require a build or test run; do not create a build solely to validate such an exempt change.
 - Any task that produces a new runnable local build must finish by synchronizing all local launch locations after the final Release build and tests:
   - update the repository's normal Release output and run `scripts\publish-win-x64.ps1` for the standard self-contained publish output;
   - enumerate desktop `.lnk` files that resolve to `SoundDirectionVisualizer.exe`, verify every absolute target path, and update every such target with the same final published build, including targets outside the repository;

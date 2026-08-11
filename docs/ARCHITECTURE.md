@@ -5,7 +5,7 @@
 1. Keep audio math deterministic and testable without Windows, an audio device, or a UI.
 2. Keep Windows integration at the edges: WASAPI capture, top-level windows, screen enumeration, Steam discovery, and global hotkeys.
 3. Represent uncertainty honestly. Stereo candidates are a set, not a fabricated single answer.
-4. Leave a stable boundary for future multichannel estimators.
+4. Leave a stable boundary for automatic best-available stereo and multichannel estimators.
 5. Keep the overlay non-activating and click-through so normal game input is unaffected.
 
 ## Projects
@@ -112,4 +112,8 @@ Foreground changes trigger a refresh through a WinEvent hook. A two-second timer
 
 ## Extension points
 
-The core currently consumes `StereoLevels`, while the UI consumes `DirectionEstimate.CandidateAzimuths`. A future multichannel implementation should introduce a channel-layout-aware level frame and a new estimator that returns the same direction result contract. The overlay and most app coordination should not need to know whether a result came from stereo, 5.1, 7.1, or a virtual endpoint.
+The core currently consumes `StereoLevels`, while the UI consumes `DirectionEstimate.CandidateAzimuths`. The next audio phase should introduce a platform-independent, channel-layout-aware level frame and a multichannel estimator that returns the same direction result contract. The overlay and most app coordination should not need to know whether a result came from stereo, process-loopback 5.1/7.1, a native multichannel endpoint, or a later virtual endpoint.
+
+Capture orchestration should first be extended with an automatic best-available process path. When a game audio process is available, it may request standard 7.1 and 5.1 process-loopback formats without requiring the user to install a driver, reroute audio, or change Windows settings. Negotiated channel count is only a capability signal, not evidence of improved direction data. Layout parsing and bounded content observations must distinguish useful independent side/rear information from silence, channel duplication, upmixed stereo, and otherwise stereo-derived content before the application claims a richer estimator mode.
+
+The existing stereo process/endpoint behavior remains the terminal fallback for every failure or inconclusive result. A multichannel attempt must never silently discard extra channels, block normal visualization, remove explicit stereo front/back ambiguity, or make a Windows spatial-sound setting mandatory. The UI may offer a dismissible spatial-sound recommendation for compatible stereo systems, but the application should not change that setting itself. Later native-endpoint and virtual-device work should reuse the same layout-aware core, validation concepts, status model, and stereo fallback rather than adding competing capture policies.
