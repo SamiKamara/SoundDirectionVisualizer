@@ -36,7 +36,7 @@ The automated test suites currently cover:
 - loud-marker top-layer ordering over overlapping ambient current and trail markers;
 - marker appearance normalization, legacy overlay-color inheritance, and tenth-pixel loud-outline precision;
 - separate Ambient markers and Loud markers settings groups with percentage-opacity sliders;
-- dark settings-window palette, custom keyboard-accessible sliders, and dark tab navigation;
+- dark settings-window palette, custom keyboard-accessible sliders, dark checkbox glyphs, vertically centered hotkey fields, and dark tab navigation;
 - independent rendering and complete hiding of every overlay element layer.
 
 Add tests in the same change whenever direction math, sample decoding, thresholds, candidate behavior, or history behavior changes. Every newly supported sample format or channel layout needs a deterministic byte-level fixture.
@@ -94,7 +94,7 @@ Before a user-facing release:
 25. Select a non-stereo endpoint with game-process capture disabled and confirm a clear error appears without a crash; confirm automatic endpoint discovery never down-selects a multichannel endpoint.
 26. Launch a second app instance and confirm it reopens the existing settings window.
 27. Exit from the tray and confirm capture, overlay, hotkeys, and notification icon stop.
-28. Confirm the settings window, title bar, controls, tabs, and notification-area menu use the dark visual system at 100%, 125%, and 150% display scaling; verify sliders remain operable by mouse, wheel, and keyboard.
+28. Confirm the settings window, title bar, controls, tabs, and notification-area menu use the dark visual system at 100%, 125%, and 150% display scaling; verify every selected checkbox has a clearly visible dark checkmark and each hotkey field keeps its text vertically centered, and verify sliders remain operable by mouse, wheel, and keyboard.
 
 Record the Windows version, scaling, display layout, endpoint name, endpoint format, and game display mode for failures.
 

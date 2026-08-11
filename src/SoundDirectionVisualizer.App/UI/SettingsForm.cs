@@ -4,29 +4,21 @@ namespace SoundDirectionVisualizer.App.UI;
 
 public sealed class SettingsForm : Form
 {
-    private readonly CheckBox _overlayEnabled = new() { Text = "Enable overlay", AutoSize = true };
+    private readonly CheckBox _overlayEnabled = DarkUiTheme.CreateCheckBox("Enable overlay");
     private readonly ComboBox _audioDevice = CreateComboBox();
-    private readonly CheckBox _useDetectedGameProcessAudio = new()
-    {
-        Text = "Capture only the detected Steam game's process audio (optional)",
-        AutoSize = true
-    };
-    private readonly CheckBox _automaticallyFallbackToGameProcessAudio = new()
-    {
-        Text = "Automatically try game-process audio when a running game's output stays centered",
-        AutoSize = true
-    };
-    private readonly CheckBox _automaticAudioCalibration = new()
-    {
-        Text = "Automatically adapt to output level and stereo width (recommended)",
-        AutoSize = true
-    };
+    private readonly CheckBox _useDetectedGameProcessAudio = DarkUiTheme.CreateCheckBox(
+        "Capture only the detected Steam game's process audio (optional)");
+    private readonly CheckBox _automaticallyFallbackToGameProcessAudio = DarkUiTheme.CreateCheckBox(
+        "Automatically try game-process audio when a running game's output stays centered");
+    private readonly CheckBox _automaticAudioCalibration = DarkUiTheme.CreateCheckBox(
+        "Automatically adapt to output level and stereo width (recommended)");
     private readonly NumericUpDown _silenceThreshold = CreateDecimalNumeric(0.00001m, 0.1m, 5, 0.00010m);
     private readonly NumericUpDown _smoothing = CreateDecimalNumeric(0.01m, 1m, 2, 0.01m);
     private readonly NumericUpDown _modelBalance = CreateDecimalNumeric(0.05m, 1m, 2, 0.05m);
-    private readonly CheckBox _loudSoundEmphasis = new() { Text = "Emphasize loud sounds separately", AutoSize = true };
+    private readonly CheckBox _loudSoundEmphasis = DarkUiTheme.CreateCheckBox("Emphasize loud sounds separately");
     private readonly NumericUpDown _loudSoundThreshold = CreateDecimalNumeric(1.1m, 10m, 1, 0.1m);
-    private readonly CheckBox _autoDetect = new() { Text = "Automatically target a running Steam game's display", AutoSize = true };
+    private readonly CheckBox _autoDetect = DarkUiTheme.CreateCheckBox(
+        "Automatically target a running Steam game's display");
     private readonly ComboBox _monitor = CreateComboBox();
     private readonly NumericUpDown _scale = CreateIntegerNumeric(10, 200, 5);
     private readonly NumericUpDown _thickness = CreateIntegerNumeric(1, 12);
@@ -35,19 +27,19 @@ public sealed class SettingsForm : Form
     private readonly DarkSlider _ambientMarkerOpacity = CreatePercentageSlider(10);
     private readonly NumericUpDown _loudMarkerSize = CreateIntegerNumeric(25, 300, 5);
     private readonly DarkSlider _loudMarkerOpacity = CreatePercentageSlider(10);
-    private readonly CheckBox _loudMarkerOutline = new() { Text = "Outline loud markers", AutoSize = true };
+    private readonly CheckBox _loudMarkerOutline = DarkUiTheme.CreateCheckBox("Outline loud markers");
     private readonly NumericUpDown _loudMarkerOutlineThickness = CreateDecimalNumeric(0.1m, 8m, 1, 0.1m);
     private readonly DarkSlider _opacitySlider = CreatePercentageSlider(0);
     private readonly NumericUpDown _horizontalOffset = CreateIntegerNumeric(-4000, 4000);
     private readonly NumericUpDown _verticalOffset = CreateIntegerNumeric(-4000, 4000);
     private readonly NumericUpDown _trailDuration = CreateDecimalNumeric(0.5m, 15m, 1, 0.5m);
-    private readonly CheckBox _showRing = new() { Text = "Show compass ring", AutoSize = true };
-    private readonly CheckBox _showTicks = new() { Text = "Show cardinal tick marks", AutoSize = true };
-    private readonly CheckBox _showCurrentRays = new() { Text = "Show current direction rays", AutoSize = true };
-    private readonly CheckBox _showCurrentMarkers = new() { Text = "Show current direction markers", AutoSize = true };
-    private readonly CheckBox _showListenerDot = new() { Text = "Show center listener dot", AutoSize = true };
-    private readonly CheckBox _showTrail = new() { Text = "Show fading direction trail", AutoSize = true };
-    private readonly CheckBox _showLabels = new() { Text = "Show F / B / L / R labels", AutoSize = true };
+    private readonly CheckBox _showRing = DarkUiTheme.CreateCheckBox("Show compass ring");
+    private readonly CheckBox _showTicks = DarkUiTheme.CreateCheckBox("Show cardinal tick marks");
+    private readonly CheckBox _showCurrentRays = DarkUiTheme.CreateCheckBox("Show current direction rays");
+    private readonly CheckBox _showCurrentMarkers = DarkUiTheme.CreateCheckBox("Show current direction markers");
+    private readonly CheckBox _showListenerDot = DarkUiTheme.CreateCheckBox("Show center listener dot");
+    private readonly CheckBox _showTrail = DarkUiTheme.CreateCheckBox("Show fading direction trail");
+    private readonly CheckBox _showLabels = DarkUiTheme.CreateCheckBox("Show F / B / L / R labels");
     private readonly Button _colorButton = DarkUiTheme.CreateButton("Change", primary: false, 92);
     private readonly Panel _colorPreview = CreateColorPreview();
     private readonly Button _ambientMarkerColorButton = DarkUiTheme.CreateButton("Change", primary: false, 92);
@@ -994,10 +986,8 @@ public sealed class SettingsForm : Form
 
     private static HotkeyTextBox CreateHotkeyTextBox() => new()
     {
-        AutoSize = false,
         Dock = DockStyle.Fill,
-        Height = 31,
-        TextAlign = HorizontalAlignment.Center
+        Height = 31
     };
 
     private static string ToColorHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";

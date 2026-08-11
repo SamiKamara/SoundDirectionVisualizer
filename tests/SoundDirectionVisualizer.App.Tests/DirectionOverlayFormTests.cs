@@ -80,6 +80,8 @@ public sealed class DirectionOverlayFormTests
             var sliders = Descendants<DarkSlider>(form).ToArray();
             var buttons = Descendants<Button>(form).ToArray();
             var inputs = Descendants<ComboBox>(form).ToArray();
+            var checkBoxes = Descendants<CheckBox>(form).ToArray();
+            var hotkeyFields = Descendants<HotkeyTextBox>(form).ToArray();
             var overlayPage = tabs.SelectedTab!;
             var overlayPageRight = overlayPage.RectangleToScreen(overlayPage.ClientRectangle).Right;
             var overlayContent = overlayPage.Controls.OfType<TableLayoutPanel>().Single();
@@ -102,6 +104,8 @@ public sealed class DirectionOverlayFormTests
                 LayoutDetails: $"page client={overlayPage.ClientSize}, padding={overlayPage.Padding}, content={overlayContent.Bounds}, slider={sliders[0].Bounds}",
                 HasPrimaryButton: buttons.Any(button => button.BackColor == DarkUiTheme.Accent),
                 InputsAreDark: inputs.All(input => input.BackColor == DarkUiTheme.InputBackground),
+                AllCheckBoxesUseDarkGlyphs: checkBoxes.All(checkBox => checkBox is DarkCheckBox),
+                AllHotkeysCenterTextVertically: hotkeyFields.All(IsTextVerticallyCentered),
                 upperClamp,
                 lowerClamp: probeSlider.Value);
         });
@@ -117,8 +121,52 @@ public sealed class DirectionOverlayFormTests
             $"Slider right edges {string.Join(", ", visualLanguage.SliderRights)} exceed page edge {visualLanguage.OverlayPageRight}; {visualLanguage.LayoutDetails}.");
         Assert.True(visualLanguage.HasPrimaryButton);
         Assert.True(visualLanguage.InputsAreDark);
+        Assert.True(visualLanguage.AllCheckBoxesUseDarkGlyphs);
+        Assert.True(visualLanguage.AllHotkeysCenterTextVertically);
         Assert.Equal(90, visualLanguage.upperClamp);
         Assert.Equal(10, visualLanguage.lowerClamp);
+    }
+
+    [Fact]
+    public void CheckedDarkCheckBoxRendersADarkMarkOnTheAccentFill()
+    {
+        var colors = RunOnStaThread(() =>
+        {
+            using var checkBox = new DarkCheckBox
+            {
+                BackColor = DarkUiTheme.CardBackground,
+                Checked = true,
+                Size = new Size(140, 24),
+                Text = "Enabled"
+            };
+            using var bitmap = new Bitmap(checkBox.Width, checkBox.Height);
+            checkBox.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+
+            var glyph = checkBox.GlyphBounds;
+            var accentPixels = 0;
+            var darkPixels = 0;
+            for (var y = glyph.Top + 2; y < glyph.Bottom - 2; y++)
+            {
+                for (var x = glyph.Left + 2; x < glyph.Right - 2; x++)
+                {
+                    var pixel = bitmap.GetPixel(x, y);
+                    if (pixel.ToArgb() == DarkUiTheme.Accent.ToArgb())
+                    {
+                        accentPixels++;
+                    }
+
+                    if (pixel.GetBrightness() < 0.15F)
+                    {
+                        darkPixels++;
+                    }
+                }
+            }
+
+            return (accentPixels, darkPixels);
+        });
+
+        Assert.True(colors.accentPixels > 0);
+        Assert.True(colors.darkPixels > 0);
     }
 
     [Fact]
@@ -544,6 +592,14 @@ public sealed class DirectionOverlayFormTests
         }
 
         return result!;
+    }
+
+    private static bool IsTextVerticallyCentered(HotkeyTextBox hotkeyTextBox)
+    {
+        var textBounds = hotkeyTextBox.TextBounds;
+        var interiorTopMargin = textBounds.Top - 1;
+        var interiorBottomMargin = hotkeyTextBox.ClientSize.Height - 1 - textBounds.Bottom;
+        return Math.Abs(interiorTopMargin - interiorBottomMargin) <= 1;
     }
 
     private static IEnumerable<T> Descendants<T>(Control root)

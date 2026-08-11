@@ -34,6 +34,11 @@ internal static class DarkUiTheme
         return button;
     }
 
+    internal static DarkCheckBox CreateCheckBox(string text) => new()
+    {
+        Text = text
+    };
+
     internal static void ApplyTo(Control root)
     {
         foreach (Control control in root.Controls)
@@ -43,6 +48,10 @@ internal static class DarkUiTheme
                 case TabPage page:
                     page.BackColor = WindowBackground;
                     page.ForeColor = PrimaryText;
+                    break;
+                case HotkeyTextBox hotkeyTextBox:
+                    hotkeyTextBox.BackColor = InputBackground;
+                    hotkeyTextBox.ForeColor = PrimaryText;
                     break;
                 case TextBox textBox:
                     textBox.BackColor = InputBackground;
@@ -59,9 +68,8 @@ internal static class DarkUiTheme
                     numeric.BorderStyle = BorderStyle.FixedSingle;
                     numeric.ForeColor = PrimaryText;
                     break;
-                case CheckBox checkBox:
+                case DarkCheckBox checkBox:
                     checkBox.BackColor = Color.Transparent;
-                    checkBox.FlatStyle = FlatStyle.Flat;
                     checkBox.ForeColor = PrimaryText;
                     break;
             }
