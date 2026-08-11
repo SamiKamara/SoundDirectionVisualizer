@@ -139,13 +139,6 @@ Report security vulnerabilities privately according to [SECURITY.md](SECURITY.md
 
 The analysis code must remain independent from WinForms and NAudio so that it can be tested with deterministic sample buffers. Behavioral changes require tests, and user-visible or architectural changes require documentation updates.
 
-## Prior art used for the initial design
-
-- [StereoDirectionVisualizer](https://github.com/SamiKamara/StereoDirectionVisualizer) provided the original L/R RMS, smoothing, stereo balance, front/back candidate, and direction-history concepts (reviewed at commit `a459bf3257a2a1bac72c66bb8535e4d7d5785093`).
-- [Aimoro](https://github.com/SamiKamara/Aimoro) provided the proven WinForms overlay, tray-app, global-hotkey, Steam-window targeting, display-selection, and persisted-settings patterns (reviewed at commit `0f1164374f12f053cad6a02a9af8460d0efbe93d`).
-
-This repository evolves those ideas into a separate sound-direction overlay with a testable core and an explicit path toward multichannel input.
-
 ## License
 
 Sound Direction Visualizer is available under the [MIT License](LICENSE).
