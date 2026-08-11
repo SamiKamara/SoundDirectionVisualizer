@@ -2,6 +2,14 @@
 
 All notable Sound Direction Visualizer changes are documented here. Versions follow semantic versioning.
 
+## [1.0.1] - 2026-08-11
+
+### Changed
+
+- Replaced low-contrast system checkbox glyphs with dark checkmarks on the dark UI's cyan selection fill
+- Vertically centered the text in global-hotkey fields while preserving keyboard capture and focus behavior
+- Removed unnecessary references to the maintainer's other projects from the README
+
 ## [1.0.0] - 2026-08-11
 
 ### Added

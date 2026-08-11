@@ -56,10 +56,10 @@ GitHub Actions runs these commands on `windows-latest` for pushes and pull reque
 Build the exact local release assets with:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.0.0
+.\scripts\build-release.ps1 -Version 1.0.1
 ```
 
-The script verifies formatting, performs the Release build and full tests, publishes the self-contained Windows x64 executable without debug symbols, packages the application license and version-specific third-party notices, creates `SHA256SUMS.txt`, and verifies every checksum. Generated assets remain under `artifacts\release\v1.0.0` and must not be committed.
+The script verifies formatting, performs the Release build and full tests, publishes the self-contained Windows x64 executable without debug symbols, packages the application license and version-specific third-party notices, creates `SHA256SUMS.txt`, and verifies every checksum. Generated assets remain under `artifacts\release\v1.0.1` and must not be committed.
 
 The tagged GitHub Actions workflow runs the same script before uploading only the named executable, license, third-party notices, and checksum manifest to a release.
 

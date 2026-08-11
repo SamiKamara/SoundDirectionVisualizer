@@ -108,7 +108,7 @@ Publishing creates a self-contained single-file executable under `artifacts\publ
 To build the same named executable and checksum used by GitHub Releases:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.0.0
+.\scripts\build-release.ps1 -Version 1.0.1
 ```
 
 Maintainers should follow [docs/RELEASING.md](docs/RELEASING.md). The tagged release workflow validates the semantic version, formatting, build, tests, executable, and SHA-256 checksum before creating or updating a GitHub Release.
