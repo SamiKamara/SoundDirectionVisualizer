@@ -14,6 +14,8 @@ public sealed class AppSettingsTests
 
         Assert.True(settings.OverlayEnabled);
         Assert.False(settings.UseDetectedGameProcessAudio);
+        Assert.True(settings.UseBestAvailableMultichannelAudio);
+        Assert.False(settings.DebugForceMultichannelSource);
         Assert.True(settings.AutomaticallyFallbackToGameProcessAudio);
         Assert.True(settings.AutomaticAudioCalibration);
         Assert.Equal(0.50, settings.ModelMaximumBalance, precision: 6);
@@ -148,12 +150,16 @@ public sealed class AppSettingsTests
         var settings = new AppSettings
         {
             UseDetectedGameProcessAudio = true,
+            UseBestAvailableMultichannelAudio = false,
+            DebugForceMultichannelSource = true,
             AutomaticallyFallbackToGameProcessAudio = false
         };
 
         var clone = settings.Clone();
 
         Assert.True(clone.UseDetectedGameProcessAudio);
+        Assert.False(clone.UseBestAvailableMultichannelAudio);
+        Assert.True(clone.DebugForceMultichannelSource);
         Assert.False(clone.AutomaticallyFallbackToGameProcessAudio);
     }
 
@@ -164,6 +170,15 @@ public sealed class AppSettingsTests
 
         Assert.NotNull(settings);
         Assert.True(settings.AutomaticallyFallbackToGameProcessAudio);
+    }
+
+    [Fact]
+    public void ExistingSettingsEnableBestAvailableMultichannelAudio()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>("{\"OverlayEnabled\":true}");
+
+        Assert.NotNull(settings);
+        Assert.True(settings.UseBestAvailableMultichannelAudio);
     }
 
     [Fact]

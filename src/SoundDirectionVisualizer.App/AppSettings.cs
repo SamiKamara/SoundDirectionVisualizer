@@ -11,6 +11,10 @@ public sealed class AppSettings
 
     public bool UseDetectedGameProcessAudio { get; set; }
 
+    public bool UseBestAvailableMultichannelAudio { get; set; } = true;
+
+    public bool DebugForceMultichannelSource { get; set; }
+
     public bool AutomaticallyFallbackToGameProcessAudio { get; set; } = true;
 
     [JsonPropertyName("PreferDetectedGameAudio")]
@@ -94,6 +98,8 @@ public sealed class AppSettings
             OverlayEnabled = OverlayEnabled,
             AudioDeviceId = AudioDeviceId,
             UseDetectedGameProcessAudio = UseDetectedGameProcessAudio,
+            UseBestAvailableMultichannelAudio = UseBestAvailableMultichannelAudio,
+            DebugForceMultichannelSource = DebugForceMultichannelSource,
             AutomaticallyFallbackToGameProcessAudio = AutomaticallyFallbackToGameProcessAudio,
             AutomaticAudioCalibration = AutomaticAudioCalibration,
             SilenceRmsThreshold = SilenceRmsThreshold,

@@ -27,25 +27,25 @@ Near-term hardening:
 - add Authenticode signing when a suitable certificate and protected signing workflow are available;
 - move from the pinned NAudio 3 preview to a stable release after process-loopback behavior is verified unchanged.
 
-## Phase 2: automatic best-available process capture
+## Phase 2: automatic best-available process capture (implemented)
 
 Before requiring surround hardware, a virtual device, or manual routing, the application should opportunistically request standard multichannel formats from Windows process loopback for the detected game's audio process. The goal is the best trustworthy direction estimate that the existing system can provide with no required user setup. Physical stereo headphones or speakers must remain a supported normal configuration.
 
-Planned technical work:
+Delivered design and implementation state:
 
-1. Attempt explicit standard process-loopback capture formats, initially 7.1 and 5.1 float PCM, when a game audio process can be resolved.
-2. Read and validate `WaveFormatExtensible` channel masks instead of relying only on channel count. Never silently analyze only the first two channels of a multichannel stream.
-3. Decode all channels into a platform-independent, layout-aware level frame and map standard horizontal speaker positions to azimuth vectors.
-4. Add a multichannel estimator that uses per-channel energy, preserves uncertainty for incomplete layouts or mixed content, and returns the existing direction-result contract.
-5. Define explicit center- and LFE-channel behavior; LFE must not be treated as a normal directional speaker by default.
-6. Separate successful format negotiation from demonstrated directional value. A stream reporting eight or six channels is not sufficient by itself: status and selection logic must account for whether useful independent side or rear information is actually observed instead of duplicated, upmixed, silent, or stereo-derived content.
-7. Keep the current stereo process and endpoint paths as the unconditional automatic fallback when process activation fails, a layout is unknown or malformed, useful multichannel content is not demonstrated, or the game only renders stereo. Fallback must keep the overlay operating and retain explicit stereo front/back ambiguity.
-8. Expose the active capture source, requested and observed layout, estimator mode, validation state, and fallback reason without requiring users to understand audio-device terminology.
-9. Allow an optional, dismissible recommendation to enable Windows spatial sound on stereo hardware when multichannel process capture is unavailable or uninformative. The application must not require or silently change that Windows setting.
-10. Add deterministic fixtures for 5.1 and 7.1 channel impulses, mixtures, silence, duplicated/upmixed stereo, unknown masks, malformed buffers, and every fallback transition.
-11. Keep capture and analysis local and aggregate-only under the existing privacy model; capability detection must not write captured audio to disk.
+1. Explicit standard process-loopback requests try 7.1 and then 5.1 float PCM for a resolved game audio process.
+2. `WaveFormatExtensible` channel masks and their channel counts are validated; multichannel streams are never silently reduced to their first two channels.
+3. All channels are decoded into platform-independent `ChannelLayout`/`ChannelLevels` frames and mapped to nominal horizontal speaker vectors.
+4. The multichannel estimator uses per-channel energy, interpolates vector direction, preserves multiple candidates for opposing/diffuse content, and returns the existing direction-result contract.
+5. Center energy participates at its nominal axis; LFE is decoded but excluded from direction, validation, fallback balance, and silence decisions.
+6. A validator promotes after three useful side/rear frames, rejects after at least 32 active frames across eight seconds, and has a 12-second wall-clock cap. It uses least-squares residuals against all front channels, so negotiated but silent, copied, upmixed, or stereo-derived content does not enable the richer estimator.
+7. Endpoint stereo runs during an automatic probe and remains the unconditional fallback. Manual process mode folds every recognized non-LFE channel to stereo until verification, then falls back through native stereo process capture to endpoint capture if activation fails.
+8. Immutable status exposes active source, requested/observed layout, estimator mode, validation state, and fallback reason in the tray and aggregate-only probe.
+9. Remaining follow-up: allow an optional, dismissible recommendation to enable Windows spatial sound on stereo hardware when multichannel process capture is unavailable or uninformative. The application must not require or silently change that Windows setting.
+10. Deterministic fixtures cover 5.1/7.1 channels, mixtures, silence, copied/upmixed content, unknown masks, malformed buffers, smoothing, validation, and status transitions.
+11. Capture and analysis remain local and aggregate-only; capability detection does not write captured audio to disk.
 
-The automatic mode should prefer a verified richer estimate, but it must never reduce baseline compatibility in pursuit of one. A user who installs and launches the application with default Windows audio settings should always receive at least the current stereo behavior.
+The automatic mode now prefers a verified richer estimate without reducing baseline compatibility in pursuit of one. A user who installs and launches the application with default Windows audio settings still receives at least the stereo behavior.
 
 ## Phase 3: broader native multichannel endpoint support
 

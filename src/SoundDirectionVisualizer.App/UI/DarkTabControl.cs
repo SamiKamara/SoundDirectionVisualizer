@@ -2,6 +2,9 @@ namespace SoundDirectionVisualizer.App.UI;
 
 internal sealed class DarkTabControl : TabControl
 {
+    private const int MinimumTabWidth = 110;
+    private const int PreferredTabWidth = 150;
+
     public DarkTabControl()
     {
         SetStyle(
@@ -13,6 +16,18 @@ internal sealed class DarkTabControl : TabControl
         ItemSize = new Size(150, 42);
         Padding = new Point(18, 6);
         SizeMode = TabSizeMode.Fixed;
+    }
+
+    protected override void OnControlAdded(ControlEventArgs eventArgs)
+    {
+        base.OnControlAdded(eventArgs);
+        UpdateTabWidth();
+    }
+
+    protected override void OnResize(EventArgs eventArgs)
+    {
+        base.OnResize(eventArgs);
+        UpdateTabWidth();
     }
 
     protected override void OnPaintBackground(PaintEventArgs eventArgs)
@@ -64,5 +79,23 @@ internal sealed class DarkTabControl : TabControl
     {
         base.OnSelectedIndexChanged(eventArgs);
         Invalidate();
+    }
+
+    private void UpdateTabWidth()
+    {
+        if (TabCount == 0)
+        {
+            return;
+        }
+
+        var availableWidth = Math.Max(0, ClientSize.Width - 4);
+        var tabWidth = Math.Clamp(
+            availableWidth / TabCount,
+            MinimumTabWidth,
+            PreferredTabWidth);
+        if (ItemSize.Width != tabWidth)
+        {
+            ItemSize = new Size(tabWidth, ItemSize.Height);
+        }
     }
 }

@@ -29,6 +29,8 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     private readonly System.Windows.Forms.Timer _renderTimer = new() { Interval = 33 };
     private readonly System.Windows.Forms.Timer _targetRefreshTimer = new() { Interval = 2000 };
     private readonly SilentEndpointProbeSchedule _silentEndpointProbeSchedule = new();
+    private readonly MultichannelProbeRetrySchedule _multichannelProbeRetrySchedule = new();
+    private readonly CaptureSessionHistory _captureSessionHistory = new();
     private readonly CenteredGameAudioFallbackDetector _centeredGameAudioFallbackDetector = new();
     private readonly System.Windows.Forms.Timer? _startupSettingsTimer;
     private readonly GameWindowMonitor _gameWindowMonitor;
@@ -39,15 +41,18 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     private DetectedGameTarget? _detectedGame;
     private GameAudioProcessTarget? _detectedGameAudio;
     private DirectionFrame? _latestFrame;
+    private AudioChannelMeterFrame? _latestAudioChannelMeterFrame;
     private SettingsForm? _activeSettingsForm;
     private bool _autoTargetRefreshInProgress;
     private bool _pendingAutoTargetRefresh;
     private bool _pendingAutoTargetForceRefresh;
     private bool _audioEndpointProbeInProgress;
+    private bool _multichannelProbeRetryInProgress;
     private bool _automaticGameProcessAudioFallbackActive;
     private bool _isExiting;
     private bool _captureFailureShown;
     private string? _captureFailure;
+    private string? _automaticEndpointId;
     private int _audioCaptureGeneration;
     private int? _processCaptureFallbackNoticeProcessId;
     private IntPtr _foregroundWindowHook;
@@ -59,6 +64,10 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         _openSettingsSignal = openSettingsSignal;
         _settings = _settingsStore.Load();
         _settings.Normalize();
+        _captureSessionHistory.Add(
+            DateTimeOffset.Now,
+            "Application session started",
+            "The event log is held in memory for this application session and is cleared when the application exits.");
         _gameWindowMonitor = new GameWindowMonitor(_steamLibraryService);
         _currentScreen = DisplayInfoFormatter.ResolveScreen(_settings.SelectedMonitorDeviceName);
         _trayIcon = LoadTrayIcon();
@@ -107,7 +116,9 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
 
         _hotkeyManager.HotkeyPressed += HandleHotkeyPressed;
         _audioCapture.FrameAvailable += HandleDirectionFrame;
+        _audioCapture.ChannelLevelsAvailable += HandleAudioChannelLevels;
         _audioCapture.CaptureFailed += HandleCaptureFailed;
+        _audioCapture.CaptureStatusChanged += HandleCaptureStatusChanged;
         _renderTimer.Tick += HandleRenderTick;
         _targetRefreshTimer.Tick += HandlePeriodicRefresh;
         SystemEvents.DisplaySettingsChanged += HandleDisplaySettingsChanged;
@@ -177,6 +188,14 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         }
     }
 
+    private void HandleAudioChannelLevels(object? sender, AudioChannelMeterFrame frame)
+    {
+        lock (_frameGate)
+        {
+            _latestAudioChannelMeterFrame = frame;
+        }
+    }
+
     private void RequestAutomaticGameProcessAudioFallback()
     {
         try
@@ -229,23 +248,74 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         }
     }
 
+    private void HandleCaptureStatusChanged(object? sender, AudioCaptureStatus status)
+    {
+        try
+        {
+            if (!_uiDispatcher.IsDisposed)
+            {
+                _uiDispatcher.BeginInvoke(new MethodInvoker(() =>
+                {
+                    if (Equals(_audioCapture.CurrentStatus, status))
+                    {
+                        var now = DateTimeOffset.Now;
+                        _multichannelProbeRetrySchedule.ObserveStatus(status, now);
+                        var sessionEvent = CaptureSessionEventFormatter.FromStatus(
+                            status,
+                            now,
+                            _multichannelProbeRetrySchedule.NextRetryAt);
+                        _captureSessionHistory.Add(
+                            sessionEvent.Timestamp,
+                            sessionEvent.Event,
+                            sessionEvent.Reason);
+                        ApplyAudioStatus(status);
+                        RefreshStatusForm();
+                    }
+                }));
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
     private void HandleRenderTick(object? sender, EventArgs eventArgs)
     {
         DirectionFrame? frame;
+        AudioChannelMeterFrame? channelMeterFrame;
         string? failure;
 
         lock (_frameGate)
         {
             frame = _latestFrame;
+            channelMeterFrame = _latestAudioChannelMeterFrame;
             failure = _captureFailure;
         }
 
-        _overlayForm.UpdateFrame(frame, DateTimeOffset.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+        _overlayForm.UpdateFrame(frame, now);
+        if (_activeSettingsForm is not null && !_activeSettingsForm.IsDisposed)
+        {
+            var liveChannelMeterFrame = _settings.DebugForceMultichannelSource
+                && channelMeterFrame is not null
+                && now - channelMeterFrame.Timestamp <= TimeSpan.FromSeconds(1)
+                    ? channelMeterFrame
+                    : null;
+            _activeSettingsForm.UpdateChannelVisualization(liveChannelMeterFrame);
+        }
 
         if (failure is not null && !_captureFailureShown)
         {
             _captureFailureShown = true;
             _audioStatusMenuItem.Text = "Audio: capture error";
+            _captureSessionHistory.Add(
+                DateTimeOffset.Now,
+                "Audio capture error",
+                failure);
+            RefreshStatusForm();
             _notifyIcon.ShowBalloonTip(
                 5000,
                 "Audio capture error",
@@ -259,14 +329,26 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         var generation = ++_audioCaptureGeneration;
         var settings = _settings.Clone();
         var useDetectedGameProcessAudio = ShouldUseDetectedGameProcessAudio;
-        var preferredGame = useDetectedGameProcessAudio ? _detectedGameAudio : null;
-        var endpointOverride = !useDetectedGameProcessAudio
+        var captureMode = DetectedGameAudioCaptureModeResolver.Resolve(
+            settings,
+            useDetectedGameProcessAudio,
+            _detectedGameAudio is not null);
+        var opportunisticMultichannel = captureMode == DetectedGameAudioCaptureMode.BestAvailableProbe;
+        var forceMultichannelSource = captureMode == DetectedGameAudioCaptureMode.ForcedMultichannelSource;
+        var preferredGame = captureMode != DetectedGameAudioCaptureMode.EndpointOnly
+            ? _detectedGameAudio
+            : null;
+        var endpointOverride = captureMode != DetectedGameAudioCaptureMode.DirectProcess
             && settings.AudioDeviceId is null
                 ? automaticEndpointId
                 : null;
+        _automaticEndpointId = endpointOverride;
+        _multichannelProbeRetrySchedule.Reset();
+        RefreshStatusForm();
         lock (_frameGate)
         {
             _latestFrame = null;
+            _latestAudioChannelMeterFrame = null;
             _captureFailure = null;
             _silentEndpointProbeSchedule.Reset(DateTimeOffset.UtcNow);
             _centeredGameAudioFallbackDetector.Reset();
@@ -280,26 +362,19 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                 settings,
                 preferredGame?.ProcessId,
                 preferredGame?.ProcessName,
-                endpointOverride);
+                endpointOverride,
+                opportunisticMultichannel,
+                forceMultichannelSource);
 
             if (_isExiting || generation != _audioCaptureGeneration)
             {
                 return;
             }
 
-            var usingAutomaticEndpoint = endpointOverride is not null
-                && string.Equals(
-                    endpointOverride,
-                    _audioCapture.ActiveDeviceId,
-                    StringComparison.OrdinalIgnoreCase);
-            var usingAutomaticGameFallback = _automaticGameProcessAudioFallbackActive
-                && !_settings.UseDetectedGameProcessAudio
-                && _audioCapture.IsProcessCapture;
-            _audioStatusMenuItem.Text = usingAutomaticGameFallback
-                ? $"Audio: Auto game fallback: {_audioCapture.ActiveDeviceName}"
-                : usingAutomaticEndpoint
-                    ? $"Audio: Auto endpoint fallback: {_audioCapture.ActiveDeviceName}"
-                    : $"Audio: {_audioCapture.ActiveDeviceName}";
+            if (_audioCapture.CurrentStatus is not null)
+            {
+                ApplyAudioStatus(_audioCapture.CurrentStatus);
+            }
 
             if (_audioCapture.ProcessCaptureFallbackReason is not null
                 && preferredGame is not null
@@ -327,11 +402,54 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
 
             _audioStatusMenuItem.Text = "Audio: unavailable";
             _captureFailureShown = true;
+            _captureSessionHistory.Add(
+                DateTimeOffset.Now,
+                "Audio capture could not start",
+                exception.Message);
+            RefreshStatusForm();
             _notifyIcon.ShowBalloonTip(
                 6000,
                 "Sound Direction Visualizer",
                 exception.Message,
                 ToolTipIcon.Error);
+        }
+    }
+
+    private void ApplyAudioStatus(AudioCaptureStatus status)
+    {
+        if (_isExiting)
+        {
+            return;
+        }
+
+        var usingAutomaticEndpoint = _automaticEndpointId is not null
+            && string.Equals(
+                _automaticEndpointId,
+                status.DeviceId,
+                StringComparison.OrdinalIgnoreCase);
+        var usingAutomaticGameFallback = _automaticGameProcessAudioFallbackActive
+            && !_settings.UseDetectedGameProcessAudio
+            && status.IsProcessCapture;
+        var source = usingAutomaticGameFallback
+            ? $"Auto game fallback: {status.SourceName}"
+            : usingAutomaticEndpoint
+                ? $"Auto endpoint fallback: {status.SourceName}"
+                : status.SourceName;
+        _audioStatusMenuItem.Text =
+            $"Audio: {source} | {AudioCaptureStatusFormatter.FormatDetails(status)}";
+    }
+
+    private AudioStatusSnapshot CreateAudioStatusSnapshot() => new(
+        _audioCapture.CurrentStatus,
+        _multichannelProbeRetrySchedule.NextRetryAt,
+        _captureSessionHistory.Snapshot(),
+        _settings.DebugForceMultichannelSource);
+
+    private void RefreshStatusForm()
+    {
+        if (_activeSettingsForm is not null && !_activeSettingsForm.IsDisposed)
+        {
+            _activeSettingsForm.UpdateStatus(CreateAudioStatusSnapshot());
         }
     }
 
@@ -378,6 +496,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     {
         RefreshTargetScreen();
         ProbeSilentDefaultAudioEndpoint();
+        RetryBestAvailableMultichannelProbe();
     }
 
     private bool ShouldUseDetectedGameProcessAudio =>
@@ -388,6 +507,8 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
     private bool NeedsSteamGameDetection =>
         _settings.AutoDetectSteamGameMonitor
         || _settings.UseDetectedGameProcessAudio
+        || _settings.UseBestAvailableMultichannelAudio
+        || _settings.DebugForceMultichannelSource
         || _settings.AutomaticallyFallbackToGameProcessAudio;
 
     private void ProbeSilentDefaultAudioEndpoint()
@@ -397,6 +518,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
             || ShouldUseDetectedGameProcessAudio
             || _settings.AudioDeviceId is not null
             || _audioCapture.IsProcessCapture
+            || _audioCapture.IsMultichannelProbeActive
             || _audioCapture.ActiveDeviceId is null)
         {
             return;
@@ -453,6 +575,80 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         }
     }
 
+    private async void RetryBestAvailableMultichannelProbe()
+    {
+        var target = _detectedGameAudio;
+        var forceMultichannelSource = _settings.DebugForceMultichannelSource;
+        if (_isExiting
+            || _multichannelProbeRetryInProgress
+            || (!_settings.UseBestAvailableMultichannelAudio && !forceMultichannelSource)
+            || (ShouldUseDetectedGameProcessAudio && !forceMultichannelSource)
+            || target is null
+            || _audioCapture.IsProcessCapture
+            || _audioCapture.IsMultichannelProbeActive)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.Now;
+        if (!_multichannelProbeRetrySchedule.TryBeginRetry(now))
+        {
+            return;
+        }
+
+        var expectedStatus = _audioCapture.CurrentStatus;
+        if (expectedStatus is null)
+        {
+            _multichannelProbeRetrySchedule.DeferRetry(now);
+            return;
+        }
+
+        _multichannelProbeRetryInProgress = true;
+        var captureGeneration = _audioCaptureGeneration;
+        _captureSessionHistory.Add(
+            now,
+            forceMultichannelSource
+                ? "Debug-forced multichannel retry requested"
+                : "Automatic multichannel retry requested",
+            $"Rechecking the detected audio process {target.ProcessName} because an earlier 7.1/5.1 activation or validation was unavailable or uninformative.");
+        RefreshStatusForm();
+
+        try
+        {
+            var started = await _audioCapture.RetryOpportunisticMultichannelAsync(
+                target.ProcessId,
+                target.ProcessName,
+                expectedStatus,
+                forceMultichannelSource);
+            if (!started
+                && !_isExiting
+                && captureGeneration == _audioCaptureGeneration)
+            {
+                _multichannelProbeRetrySchedule.DeferRetry(DateTimeOffset.Now);
+                _captureSessionHistory.Add(
+                    DateTimeOffset.Now,
+                    "Multichannel retry deferred",
+                    "The active audio source was changing or the previous probe was still stopping; the retry will be attempted again shortly.");
+            }
+        }
+        catch (Exception exception)
+        {
+            if (!_isExiting && captureGeneration == _audioCaptureGeneration)
+            {
+                _multichannelProbeRetrySchedule.DeferRetry(DateTimeOffset.Now);
+                _captureSessionHistory.Add(
+                    DateTimeOffset.Now,
+                    "Multichannel retry failed",
+                    exception.Message);
+            }
+        }
+        finally
+        {
+            _multichannelProbeRetryInProgress = false;
+            RefreshStatusForm();
+        }
+    }
+
     private void CycleMonitor()
     {
         var screens = Screen.AllScreens;
@@ -481,7 +677,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         }
 
         _hotkeyManager.ClearBindings();
-        _activeSettingsForm = new SettingsForm(_settings);
+        _activeSettingsForm = new SettingsForm(_settings, CreateAudioStatusSnapshot());
         _activeSettingsForm.OverlayPreviewChanged += HandleOverlayPreviewChanged;
         var settingsSaved = false;
 
@@ -643,13 +839,15 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                 _pendingAutoTargetRefresh = false;
                 _pendingAutoTargetForceRefresh = false;
 
-                var useDetectedGameProcessAudio = ShouldUseDetectedGameProcessAudio;
+                var resolveGameAudioProcess = ShouldUseDetectedGameProcessAudio
+                    || _settings.UseBestAvailableMultichannelAudio
+                    || _settings.DebugForceMultichannelSource;
                 var detection = await Task.Run(() =>
                 {
                     try
                     {
                         var game = _gameWindowMonitor.Detect();
-                        var audio = useDetectedGameProcessAudio && game is not null
+                        var audio = resolveGameAudioProcess && game is not null
                             ? _gameAudioProcessResolver.Resolve(game)
                             : null;
                         return (Game: game, Audio: audio);
@@ -666,7 +864,7 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                 }
 
                 var previousGameProcessId = _detectedGame?.ProcessId;
-                var previousPreferredProcessId = ShouldUseDetectedGameProcessAudio
+                var previousPreferredProcessId = resolveGameAudioProcess
                     ? _detectedGameAudio?.ProcessId
                     : null;
                 var gameChanged = previousGameProcessId != detection.Game?.ProcessId;
@@ -680,14 +878,17 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
                 }
 
                 _detectedGame = detection.Game;
-                _detectedGameAudio = ShouldUseDetectedGameProcessAudio
+                _detectedGameAudio = resolveGameAudioProcess
                     ? detection.Audio
                     : null;
-                var nextPreferredProcessId = ShouldUseDetectedGameProcessAudio
+                var nextPreferredProcessId = resolveGameAudioProcess
                     ? detection.Audio?.ProcessId
                     : null;
                 if (previousPreferredProcessId != nextPreferredProcessId
-                    || (gameChanged && _audioCapture.IsProcessCapture))
+                    || (gameChanged
+                        && (_audioCapture.IsProcessCapture
+                            || _settings.UseBestAvailableMultichannelAudio
+                            || _settings.DebugForceMultichannelSource)))
                 {
                     StartAudioCapture();
                 }
@@ -907,7 +1108,9 @@ public sealed class SoundDirectionVisualizerApplicationContext : ApplicationCont
         }
 
         _audioCapture.FrameAvailable -= HandleDirectionFrame;
+        _audioCapture.ChannelLevelsAvailable -= HandleAudioChannelLevels;
         _audioCapture.CaptureFailed -= HandleCaptureFailed;
+        _audioCapture.CaptureStatusChanged -= HandleCaptureStatusChanged;
         _audioCapture.Dispose();
         _hotkeyManager.Dispose();
         _overlayForm.Dispose();

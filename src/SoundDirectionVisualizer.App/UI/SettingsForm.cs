@@ -1,4 +1,5 @@
 using SoundDirectionVisualizer.App.Native;
+using SoundDirectionVisualizer.App.Services;
 
 namespace SoundDirectionVisualizer.App.UI;
 
@@ -8,6 +9,10 @@ public sealed class SettingsForm : Form
     private readonly ComboBox _audioDevice = CreateComboBox();
     private readonly CheckBox _useDetectedGameProcessAudio = DarkUiTheme.CreateCheckBox(
         "Capture only the detected Steam game's process audio (optional)");
+    private readonly CheckBox _useBestAvailableMultichannelAudio = DarkUiTheme.CreateCheckBox(
+        "Automatically use verified multichannel game audio when available");
+    private readonly CheckBox _debugForceMultichannelSource = DarkUiTheme.CreateCheckBox(
+        "Debug: force multichannel source when available");
     private readonly CheckBox _automaticallyFallbackToGameProcessAudio = DarkUiTheme.CreateCheckBox(
         "Automatically try game-process audio when a running game's output stays centered");
     private readonly CheckBox _automaticAudioCalibration = DarkUiTheme.CreateCheckBox(
@@ -51,9 +56,22 @@ public sealed class SettingsForm : Form
     private readonly HotkeyTextBox _toggleHotkey = CreateHotkeyTextBox();
     private readonly HotkeyTextBox _cycleHotkey = CreateHotkeyTextBox();
     private readonly HotkeyTextBox _openSettingsHotkey = CreateHotkeyTextBox();
+    private readonly Label _statusSource = CreateStatusValueLabel();
+    private readonly Label _statusSourcePolicy = CreateStatusValueLabel();
+    private readonly Label _statusMethod = CreateStatusValueLabel();
+    private readonly Label _statusEstimator = CreateStatusValueLabel();
+    private readonly Label _statusFormat = CreateStatusValueLabel();
+    private readonly Label _statusRequestedLayout = CreateStatusValueLabel();
+    private readonly Label _statusObservedLayout = CreateStatusValueLabel();
+    private readonly Label _statusValidation = CreateStatusValueLabel();
+    private readonly Label _statusFallbackReason = CreateStatusValueLabel();
+    private readonly Label _statusNextRetry = CreateStatusValueLabel();
+    private readonly ChannelLevelMeter _channelLevelMeter = new();
+    private readonly TextBox _statusEventLog = CreateStatusEventLog();
     private readonly Panel _tabsHost = new();
     private readonly List<TableLayoutPanel> _contentStacks = [];
     private readonly List<Label> _wrappingLabels = [];
+    private Control? _channelVisualizationCard;
     private readonly Icon _windowIcon = LoadWindowIcon();
     private string _selectedColorHex = "#FFFFFF";
     private string _selectedAmbientMarkerColorHex = "#FFFFFF";
@@ -62,6 +80,11 @@ public sealed class SettingsForm : Form
     private bool _isLoading = true;
 
     public SettingsForm(AppSettings settings)
+        : this(settings, AudioStatusSnapshot.Empty)
+    {
+    }
+
+    internal SettingsForm(AppSettings settings, AudioStatusSnapshot statusSnapshot)
     {
         Text = "Sound Direction Visualizer";
         StartPosition = FormStartPosition.CenterScreen;
@@ -81,6 +104,7 @@ public sealed class SettingsForm : Form
         BuildLayout();
         DarkUiTheme.ApplyTo(this);
         LoadSettings(settings);
+        UpdateStatus(statusSnapshot);
         _isLoading = false;
 
         Shown += (_, _) => FitToWorkingArea();
@@ -110,6 +134,7 @@ public sealed class SettingsForm : Form
         tabs.TabPages.Add(BuildAudioTab());
         tabs.TabPages.Add(BuildOverlayTab());
         tabs.TabPages.Add(BuildTargetingTab());
+        tabs.TabPages.Add(BuildStatusTab());
         tabs.TabPages.Add(BuildHotkeysTab());
 
         _tabsHost.BackColor = DarkUiTheme.WindowBackground;
@@ -188,13 +213,12 @@ public sealed class SettingsForm : Form
         {
             AutoSize = true,
             BackColor = DarkUiTheme.WindowBackground,
-            ColumnCount = 2,
+            ColumnCount = 1,
             Dock = DockStyle.Top,
             Margin = Padding.Empty,
             Padding = new Padding(22, 18, 22, 14)
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         var title = new Label
         {
@@ -205,24 +229,12 @@ public sealed class SettingsForm : Form
             Text = "Sound Direction Visualizer"
         };
         var subtitle = CreateWrappingLabel(
-            "Tune audio analysis, overlay appearance, display targeting, and global shortcuts.",
+            "Tune audio analysis, overlay appearance, display targeting, and global shortcuts, or inspect the live capture status.",
             DarkUiTheme.SecondaryText);
         subtitle.Margin = new Padding(0, 4, 0, 0);
 
-        var livePreview = new Label
-        {
-            AutoSize = true,
-            BorderStyle = BorderStyle.FixedSingle,
-            ForeColor = DarkUiTheme.Accent,
-            Margin = new Padding(18, 5, 0, 0),
-            Padding = new Padding(9, 5, 9, 5),
-            Text = "LIVE OVERLAY PREVIEW"
-        };
-
         header.Controls.Add(title, 0, 0);
         header.Controls.Add(subtitle, 0, 1);
-        header.Controls.Add(livePreview, 1, 0);
-        header.SetRowSpan(livePreview, 2);
         return header;
     }
 
@@ -233,12 +245,16 @@ public sealed class SettingsForm : Form
 
         var sourceCard = CreateCard(
             "Audio source",
-            "Listen to one explicit stereo source at a time. The default endpoint follows the Windows multimedia output.");
+            "Normally keep the selected stereo endpoint as the baseline and promote richer game-process audio only after validation. The debug override below can force an available multichannel source. The default endpoint follows the Windows multimedia output.");
         AddRow(sourceCard, "Output device", _audioDevice);
+        AddWideRow(sourceCard, _useBestAvailableMultichannelAudio);
+        AddWideRow(sourceCard, _debugForceMultichannelSource);
         AddWideRow(sourceCard, _useDetectedGameProcessAudio);
         AddWideRow(sourceCard, _automaticallyFallbackToGameProcessAudio);
         AddWideRow(sourceCard, CreateNote(
-            "Game-process capture can preserve stereo direction when a headset or spatial-audio driver exposes only dual mono at the physical output. " +
+            "The automatic best-available path checks standard 7.1/5.1 process audio while endpoint stereo remains active, and switches only after independent side or rear content is verified. " +
+            "The debug force option switches to an available 7.1/5.1 process source before content validation; uninformative channels still use an honest stereo fold-down. " +
+            "Manual game-process capture can preserve stereo direction when a headset or spatial-audio driver exposes only dual mono at the physical output. " +
             "The automatic fallback tries it after eight seconds of audible centered output while a Steam game is running."));
         AddContent(content, sourceCard);
 
@@ -371,6 +387,119 @@ public sealed class SettingsForm : Form
         return page;
     }
 
+    private TabPage BuildStatusTab()
+    {
+        var page = CreateTab("Status");
+        var content = CreateContentStack();
+
+        var currentCard = CreateCard(
+            "Current audio path",
+            "This is the capture and direction-estimation path currently feeding the overlay. Values update while this window is open.");
+        AddRow(currentCard, "Source", _statusSource);
+        AddRow(currentCard, "Source policy", _statusSourcePolicy);
+        AddRow(currentCard, "Capture method", _statusMethod);
+        AddRow(currentCard, "Direction estimator", _statusEstimator);
+        AddRow(currentCard, "Audio format", _statusFormat);
+        AddRow(currentCard, "Requested layout", _statusRequestedLayout);
+        AddRow(currentCard, "Observed layout", _statusObservedLayout);
+        AddRow(currentCard, "Validation state", _statusValidation);
+        AddRow(currentCard, "Fallback reason", _statusFallbackReason);
+        AddRow(currentCard, "Next multichannel retry", _statusNextRetry);
+        AddContent(content, currentCard);
+
+        var channelCard = CreateCard(
+            "Live monitored channels",
+            "Debug view of every channel currently received from the active capture source. Levels use a −60…0 dBFS scale; LFE is shown for diagnostics but is not used for direction estimation.");
+        AddWideRow(channelCard, _channelLevelMeter, new Padding(0, 3, 0, 0));
+        _channelVisualizationCard = channelCard;
+        AddContent(content, channelCard);
+
+        var eventCard = CreateCard(
+            "Session event log",
+            "Recent in-memory events explain why the capture method changed or why a fallback was retained. The newest event is shown first; audio is never written to this log.");
+        AddWideRow(eventCard, _statusEventLog, new Padding(0, 3, 0, 0));
+        AddContent(content, eventCard);
+
+        page.Controls.Add(content);
+        return page;
+    }
+
+    internal void UpdateStatus(AudioStatusSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(new MethodInvoker(() => UpdateStatus(snapshot)));
+            return;
+        }
+
+        var status = snapshot.CurrentStatus;
+        _statusSource.Text = status?.SourceName ?? "Starting audio capture...";
+        _statusSourcePolicy.Text = snapshot.DebugForceMultichannelSourceEnabled
+            ? "Debug force enabled: prefer an available 7.1/5.1 game-process source"
+            : "Debug force disabled; normal capture settings apply";
+        _statusMethod.Text = FormatCaptureMethod(status);
+        _statusEstimator.Text = status?.EstimatorMode switch
+        {
+            AudioEstimatorMode.Multichannel => "Verified multichannel direction",
+            AudioEstimatorMode.Stereo => "Stereo left/right (front/back remains ambiguous)",
+            _ => "Not available yet"
+        };
+        _statusFormat.Text = status?.FormatDescription ?? "—";
+        _statusRequestedLayout.Text = status?.RequestedLayout ?? "—";
+        _statusObservedLayout.Text = status?.ObservedLayout ?? "—";
+        _statusValidation.Text = (status?.MultichannelState, status?.IsMultichannelSourceForced) switch
+        {
+            (MultichannelCaptureState.Probing, true) => "Forced source active; checking whether multichannel direction is trustworthy",
+            (MultichannelCaptureState.Verified, true) => "Forced source active; multichannel direction verified",
+            (MultichannelCaptureState.Uninformative, true) => "Forced source active; using stereo fold-down because content is uninformative",
+            (MultichannelCaptureState.Unavailable, true) => "Forced source unavailable; endpoint fallback active",
+            (MultichannelCaptureState.NotAttempted, _) => "Stereo baseline; no multichannel validation active",
+            (MultichannelCaptureState.Probing, _) => "Checking for independent side/rear content",
+            (MultichannelCaptureState.Verified, _) => "Verified",
+            (MultichannelCaptureState.Uninformative, _) => "Rejected as uninformative",
+            (MultichannelCaptureState.Unavailable, _) => "Activation unavailable",
+            _ => "Starting..."
+        };
+        _statusFallbackReason.Text = string.IsNullOrWhiteSpace(status?.FallbackReason)
+            ? "—"
+            : status.FallbackReason;
+        _statusNextRetry.Text = snapshot.NextMultichannelRetryAt is null
+            ? "—"
+            : snapshot.NextMultichannelRetryAt.Value.ToLocalTime().ToString("HH:mm:ss");
+        _channelLevelMeter.SetVisualizationEnabled(snapshot.DebugForceMultichannelSourceEnabled);
+        if (_channelVisualizationCard is not null)
+        {
+            _channelVisualizationCard.Visible = snapshot.DebugForceMultichannelSourceEnabled;
+        }
+
+        _statusEventLog.Text = FormatEventLog(snapshot.Events);
+        _statusEventLog.SelectionStart = 0;
+        _statusEventLog.SelectionLength = 0;
+    }
+
+    internal void UpdateChannelVisualization(AudioChannelMeterFrame? frame)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(new MethodInvoker(() => UpdateChannelVisualization(frame)));
+            return;
+        }
+
+        _channelLevelMeter.UpdateFrame(frame);
+    }
+
     private Control BuildElementToggleGrid()
     {
         var toggles = new TableLayoutPanel
@@ -481,6 +610,8 @@ public sealed class SettingsForm : Form
 
         _overlayEnabled.Checked = settings.OverlayEnabled;
         _useDetectedGameProcessAudio.Checked = settings.UseDetectedGameProcessAudio;
+        _useBestAvailableMultichannelAudio.Checked = settings.UseBestAvailableMultichannelAudio;
+        _debugForceMultichannelSource.Checked = settings.DebugForceMultichannelSource;
         _automaticallyFallbackToGameProcessAudio.Checked = settings.AutomaticallyFallbackToGameProcessAudio;
         _automaticAudioCalibration.Checked = settings.AutomaticAudioCalibration;
         _silenceThreshold.Value = (decimal)settings.SilenceRmsThreshold;
@@ -615,6 +746,8 @@ public sealed class SettingsForm : Form
             OverlayEnabled = _overlayEnabled.Checked,
             AudioDeviceId = selectedEndpoint?.Id,
             UseDetectedGameProcessAudio = _useDetectedGameProcessAudio.Checked,
+            UseBestAvailableMultichannelAudio = _useBestAvailableMultichannelAudio.Checked,
+            DebugForceMultichannelSource = _debugForceMultichannelSource.Checked,
             AutomaticallyFallbackToGameProcessAudio = _automaticallyFallbackToGameProcessAudio.Checked,
             AutomaticAudioCalibration = _automaticAudioCalibration.Checked,
             SilenceRmsThreshold = (double)_silenceThreshold.Value,
@@ -910,6 +1043,69 @@ public sealed class SettingsForm : Form
         var label = CreateWrappingLabel(text, DarkUiTheme.SecondaryText);
         label.Padding = new Padding(0, 2, 0, 0);
         return label;
+    }
+
+    private static Label CreateStatusValueLabel() => new()
+    {
+        Anchor = AnchorStyles.Left,
+        AutoSize = true,
+        ForeColor = DarkUiTheme.PrimaryText,
+        MaximumSize = new Size(520, 0),
+        Text = "—"
+    };
+
+    private static TextBox CreateStatusEventLog() => new()
+    {
+        AccessibleName = "Session event log",
+        BackColor = DarkUiTheme.InputBackground,
+        BorderStyle = BorderStyle.FixedSingle,
+        Dock = DockStyle.Top,
+        Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point),
+        ForeColor = DarkUiTheme.PrimaryText,
+        Height = 260,
+        Multiline = true,
+        ReadOnly = true,
+        ScrollBars = ScrollBars.Vertical,
+        TabStop = true,
+        WordWrap = true
+    };
+
+    private static string FormatEventLog(IReadOnlyList<CaptureSessionEvent> events)
+    {
+        if (events.Count == 0)
+        {
+            return "No capture events have been recorded yet.";
+        }
+
+        return string.Join(
+            Environment.NewLine + Environment.NewLine,
+            events.Reverse().Select(item =>
+                $"{item.Timestamp.ToLocalTime():HH:mm:ss}  {item.Event}" + Environment.NewLine +
+                $"          Reason: {item.Reason}"));
+    }
+
+    private static string FormatCaptureMethod(AudioCaptureStatus? status)
+    {
+        if (status is null)
+        {
+            return "Not available yet";
+        }
+
+        if (status.IsMultichannelSourceForced)
+        {
+            return status.IsProcessCapture
+                ? "Debug-forced multichannel process loopback"
+                : "WASAPI endpoint fallback (forced multichannel source unavailable)";
+        }
+
+        if (status.MultichannelState == MultichannelCaptureState.Probing && !status.IsProcessCapture)
+        {
+            return "WASAPI endpoint loopback + process-loopback validation";
+        }
+
+        return status.IsProcessCapture
+            ? "Windows process loopback"
+            : "WASAPI endpoint loopback";
     }
 
     private Label CreateWrappingLabel(string text, Color color)

@@ -2,6 +2,21 @@
 
 All notable Sound Direction Visualizer changes are documented here. Versions follow semantic versioning.
 
+## Unreleased
+
+### Added
+
+- Automatic best-available detected-game process capture that requests standard 7.1/5.1 layouts and promotes them only after useful independent side/rear content is verified
+- Platform-independent all-channel analysis, multichannel direction estimation, stereo fold-down, validation, fallback status, and deterministic 5.1/7.1 tests
+- Optional debug setting that forces an available multichannel game-process source while keeping validation-driven estimator honesty
+- Live Status tab with capture policy, source, estimator, validation, retry timing, fallback reasons, and an in-memory session event log
+- Debug-force Status visualization with live aggregate dBFS meters for every monitored channel, including diagnostic LFE
+
+### Changed
+
+- Endpoint stereo now remains active during bounded automatic multichannel probing, preserving explicit front/back ambiguity for unavailable, malformed, silent, copied, or stereo-derived surround content
+- Capture diagnostics, the Status tab, and the tray audio row now report source policy, layout, estimator, validation, retry, and fallback state
+
 ## [1.0.2] - 2026-08-11
 
 ### Changed

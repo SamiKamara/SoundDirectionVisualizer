@@ -1,4 +1,5 @@
 using SoundDirectionVisualizer.App;
+using SoundDirectionVisualizer.App.Services;
 using SoundDirectionVisualizer.App.UI;
 using SoundDirectionVisualizer.Core.Audio;
 using SoundDirectionVisualizer.Core.Direction;
@@ -9,6 +10,51 @@ namespace SoundDirectionVisualizer.App.Tests;
 public sealed class DirectionOverlayFormTests
 {
     [Fact]
+    public void SettingsRemoveTheDecorativePreviewBadgeAndExposeLiveStatusDetails()
+    {
+        var now = DateTimeOffset.Now;
+        var status = new AudioCaptureStatus(
+            "Headphones",
+            "endpoint-id",
+            ProcessId: null,
+            "48000Hz 32-bit IEEE float stereo",
+            AudioEstimatorMode.Stereo,
+            MultichannelCaptureState.Uninformative,
+            RequestedLayout: "7.1",
+            ObservedLayout: "7.1",
+            MultichannelProcessName: "Game",
+            FallbackReason: "The surround channels repeated the stereo mix.");
+        var snapshot = new AudioStatusSnapshot(
+            status,
+            now + TimeSpan.FromSeconds(30),
+            [new CaptureSessionEvent(now, "Stereo fallback kept", "The surround channels repeated the stereo mix.")]);
+
+        var view = RunOnStaThread(() =>
+        {
+            using var form = new SettingsForm(new AppSettings(), snapshot);
+            form.Show();
+            Application.DoEvents();
+            var tabs = Descendants<DarkTabControl>(form).Single();
+            var statusPage = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "Status");
+            return (
+                TabNames: tabs.TabPages.Cast<TabPage>().Select(page => page.Text).ToArray(),
+                AllTabsFit: Enumerable.Range(0, tabs.TabCount).All(index => tabs.GetTabRect(index).Right <= tabs.ClientSize.Width),
+                HasPreviewBadge: Descendants<Label>(form).Any(label => label.Text == "LIVE OVERLAY PREVIEW"),
+                StatusText: string.Join("\n", Descendants<Label>(statusPage).Select(label => label.Text)),
+                EventLog: Descendants<TextBox>(statusPage).Single(textBox => textBox.AccessibleName == "Session event log").Text);
+        });
+
+        Assert.Equal(["Audio", "Overlay", "Target display", "Status", "Hotkeys"], view.TabNames);
+        Assert.True(view.AllTabsFit);
+        Assert.False(view.HasPreviewBadge);
+        Assert.Contains("WASAPI endpoint loopback", view.StatusText);
+        Assert.Contains("Rejected as uninformative", view.StatusText);
+        Assert.Contains("The surround channels repeated the stereo mix.", view.StatusText);
+        Assert.Contains("Stereo fallback kept", view.EventLog);
+        Assert.Contains("Reason: The surround channels repeated the stereo mix.", view.EventLog);
+    }
+
+    [Fact]
     public void SettingsPresentGameProcessCaptureAsAnOptionalDisabledMode()
     {
         var captureModes = RunOnStaThread(() =>
@@ -16,12 +62,140 @@ public sealed class DirectionOverlayFormTests
             using var form = new SettingsForm(new AppSettings());
             var checkBoxes = Descendants<CheckBox>(form).ToDictionary(checkBox => checkBox.Text);
             return (
+                BestAvailable: checkBoxes["Automatically use verified multichannel game audio when available"].Checked,
+                DebugForce: checkBoxes["Debug: force multichannel source when available"].Checked,
                 Manual: checkBoxes["Capture only the detected Steam game's process audio (optional)"].Checked,
                 Automatic: checkBoxes["Automatically try game-process audio when a running game's output stays centered"].Checked);
         });
 
+        Assert.True(captureModes.BestAvailable);
+        Assert.False(captureModes.DebugForce);
         Assert.False(captureModes.Manual);
         Assert.True(captureModes.Automatic);
+    }
+
+    [Fact]
+    public void DebugForceMultichannelSettingIsSavedFromTheAudioTab()
+    {
+        var saved = RunOnStaThread(() =>
+        {
+            using var form = new SettingsForm(new AppSettings());
+            form.Show();
+            Application.DoEvents();
+            var debugForce = Descendants<CheckBox>(form).Single(checkBox =>
+                checkBox.Text == "Debug: force multichannel source when available");
+            debugForce.Checked = true;
+            Descendants<Button>(form).Single(button => button.Text == "Save").PerformClick();
+            return form.ResultSettings.DebugForceMultichannelSource;
+        });
+
+        Assert.True(saved);
+    }
+
+    [Fact]
+    public void StatusExplainsForcedSourceSeparatelyFromItsStereoEstimator()
+    {
+        var status = new AudioCaptureStatus(
+            "Game: Test",
+            DeviceId: null,
+            ProcessId: 42,
+            "7.1 float",
+            AudioEstimatorMode.Stereo,
+            MultichannelCaptureState.Uninformative,
+            RequestedLayout: "7.1",
+            ObservedLayout: "7.1",
+            MultichannelProcessName: "Test",
+            FallbackReason: "No independent side or rear content.",
+            IsMultichannelSourceForced: true);
+        var snapshot = new AudioStatusSnapshot(
+            status,
+            NextMultichannelRetryAt: null,
+            Events: [],
+            DebugForceMultichannelSourceEnabled: true);
+
+        var statusText = RunOnStaThread(() =>
+        {
+            using var form = new SettingsForm(new AppSettings(), snapshot);
+            var tabs = Descendants<DarkTabControl>(form).Single();
+            var statusPage = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "Status");
+            return string.Join("\n", Descendants<Label>(statusPage).Select(label => label.Text));
+        });
+
+        Assert.Contains("Debug force enabled", statusText);
+        Assert.Contains("Debug-forced multichannel process loopback", statusText);
+        Assert.Contains("Stereo left/right", statusText);
+        Assert.Contains("Forced source active; using stereo fold-down", statusText);
+    }
+
+    [Fact]
+    public void ForcedDebugStatusRendersEveryMonitoredChannelLive()
+    {
+        var snapshot = new AudioStatusSnapshot(
+            CurrentStatus: null,
+            NextMultichannelRetryAt: null,
+            Events: [],
+            DebugForceMultichannelSourceEnabled: true);
+        var frame = AudioChannelMeterFrameFactory.FromMultichannel(
+            DateTimeOffset.UtcNow,
+            "Game: Test",
+            new ChannelLevels(
+                ChannelLayout.Surround71,
+                [1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0.0078125]));
+
+        var view = RunOnStaThread(() =>
+        {
+            using var form = new SettingsForm(new AppSettings(), snapshot);
+            form.Show();
+            var tabs = Descendants<DarkTabControl>(form).Single();
+            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "Status");
+            form.UpdateChannelVisualization(frame);
+            Application.DoEvents();
+            var meter = Descendants<ChannelLevelMeter>(form).Single();
+            using var bitmap = new Bitmap(meter.Width, meter.Height);
+            meter.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            var accentPixels = CountPixels(bitmap, DarkUiTheme.Accent);
+            return (
+                meter.Visible,
+                meter.VisualizationEnabled,
+                meter.DisplayedChannelCount,
+                meter.CurrentFrame?.LayoutName,
+                meter.AccessibleDescription,
+                accentPixels);
+        });
+
+        Assert.True(view.Visible);
+        Assert.True(view.VisualizationEnabled);
+        Assert.Equal(8, view.DisplayedChannelCount);
+        Assert.Equal("7.1", view.LayoutName);
+        Assert.Contains("FL Front left", view.AccessibleDescription);
+        Assert.Contains("LFE Low-frequency effects", view.AccessibleDescription);
+        Assert.Contains("SR Side right", view.AccessibleDescription);
+        Assert.True(view.accentPixels > 0);
+    }
+
+    [Fact]
+    public void LiveChannelVisualizationIsHiddenOutsideForcedDebugMode()
+    {
+        var snapshot = new AudioStatusSnapshot(
+            CurrentStatus: null,
+            NextMultichannelRetryAt: null,
+            Events: [],
+            DebugForceMultichannelSourceEnabled: false);
+
+        var view = RunOnStaThread(() =>
+        {
+            using var form = new SettingsForm(new AppSettings(), snapshot);
+            form.Show();
+            var tabs = Descendants<DarkTabControl>(form).Single();
+            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "Status");
+            Application.DoEvents();
+            var meter = Descendants<ChannelLevelMeter>(form).Single();
+            return (meter.Visible, meter.VisualizationEnabled, meter.DisplayedChannelCount);
+        });
+
+        Assert.False(view.Visible);
+        Assert.False(view.VisualizationEnabled);
+        Assert.Equal(0, view.DisplayedChannelCount);
     }
 
     [Fact]
@@ -600,6 +774,24 @@ public sealed class DirectionOverlayFormTests
         var interiorTopMargin = textBounds.Top - 1;
         var interiorBottomMargin = hotkeyTextBox.ClientSize.Height - 1 - textBounds.Bottom;
         return Math.Abs(interiorTopMargin - interiorBottomMargin) <= 1;
+    }
+
+    private static int CountPixels(Bitmap bitmap, Color color)
+    {
+        var expected = color.ToArgb();
+        var count = 0;
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            for (var x = 0; x < bitmap.Width; x++)
+            {
+                if (bitmap.GetPixel(x, y).ToArgb() == expected)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
     }
 
     private static IEnumerable<T> Descendants<T>(Control root)

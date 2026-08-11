@@ -58,6 +58,7 @@ Console.WriteLine($"Requested process: {targetProcess.ProcessName} ({targetProce
 Console.WriteLine($"Active source: {capture.ActiveDeviceName}");
 Console.WriteLine($"Active process ID: {capture.ActiveProcessId?.ToString() ?? "none (output fallback)"}");
 Console.WriteLine($"Format: {capture.FormatDescription}");
+PrintCaptureStatus(capture.CurrentStatus);
 if (capture.ProcessCaptureFallbackReason is not null)
 {
     Console.WriteLine($"Process fallback reason: {capture.ProcessCaptureFallbackReason}");
@@ -107,6 +108,23 @@ Console.WriteLine($"Classified loud frames: {emphasizedFrames.Length}/{active.Le
 Console.WriteLine(
     $"Exact hard-side frames: {hardSideFrames}/{active.Length}; " +
     $"loudest decile: {loudHardSideFrames}/{loudFrames.Length}");
+Console.WriteLine("Final capture status:");
+PrintCaptureStatus(capture.CurrentStatus);
+
+static void PrintCaptureStatus(AudioCaptureStatus? status)
+{
+    if (status is null)
+    {
+        Console.WriteLine("Capture status: unavailable");
+        return;
+    }
+
+    Console.WriteLine($"Requested layout: {status.RequestedLayout ?? "none"}");
+    Console.WriteLine($"Observed layout: {status.ObservedLayout ?? "none"}");
+    Console.WriteLine($"Estimator mode: {status.EstimatorMode}");
+    Console.WriteLine($"Validation state: {status.MultichannelState}");
+    Console.WriteLine($"Fallback reason: {status.FallbackReason ?? "none"}");
+}
 
 static double Percentile(double[] sorted, double percentile)
 {
