@@ -2,6 +2,12 @@
 
 All notable Sound Direction Visualizer changes are documented here. Versions follow semantic versioning.
 
+## [1.0.2] - 2026-08-11
+
+### Changed
+
+- Reworked the application, tray, shortcut, and README icon around a compact cyan direction ring with prominent mirrored markers
+
 ## [1.0.1] - 2026-08-11
 
 ### Changed

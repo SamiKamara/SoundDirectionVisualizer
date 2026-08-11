@@ -56,10 +56,10 @@ GitHub Actions runs these commands on `windows-latest` for pushes and pull reque
 Build the exact local release assets with:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.0.1
+.\scripts\build-release.ps1 -Version 1.0.2
 ```
 
-The script verifies formatting, performs the Release build and full tests, publishes the self-contained Windows x64 executable without debug symbols, packages the application license and version-specific third-party notices, creates `SHA256SUMS.txt`, and verifies every checksum. Generated assets remain under `artifacts\release\v1.0.1` and must not be committed.
+The script verifies formatting, performs the Release build and full tests, publishes the self-contained Windows x64 executable without debug symbols, packages the application license and version-specific third-party notices, creates `SHA256SUMS.txt`, and verifies every checksum. Generated assets remain under `artifacts\release\v1.0.2` and must not be committed.
 
 The tagged GitHub Actions workflow runs the same script before uploading only the named executable, license, third-party notices, and checksum manifest to a release.
 
@@ -95,6 +95,7 @@ Before a user-facing release:
 26. Launch a second app instance and confirm it reopens the existing settings window.
 27. Exit from the tray and confirm capture, overlay, hotkeys, and notification icon stop.
 28. Confirm the settings window, title bar, controls, tabs, and notification-area menu use the dark visual system at 100%, 125%, and 150% display scaling; verify every selected checkbox has a clearly visible dark checkmark and each hotkey field keeps its text vertically centered, and verify sliders remain operable by mouse, wheel, and keyboard.
+29. Confirm the compact cyan direction ring and both light direction markers remain recognizable in the settings title bar, notification area, desktop shortcut, executable, and README image.
 
 Record the Windows version, scaling, display layout, endpoint name, endpoint format, and game display mode for failures.
 

@@ -21,13 +21,13 @@ The release is a self-contained, single-file executable. It does not require a s
 - Adaptive loud-sound classification relative to recent ambience, with separately styled current and delayed markers
 - Optional manual smoothing, silence-threshold, and hard-pan calibration controls
 - Click-through, always-on-top compass overlay with current rays and a fading history trail
-- Responsive dark-mode settings window and matching notification-area menu, styled around the application's cyan compass identity
+- Responsive dark-mode settings window and matching notification-area menu, styled around the application's cyan direction-ring identity
 - Live-previewed overlay appearance plus independent ambient/loud marker size, fill color, percentage opacity, labels, position, and history duration
 - Independent visibility toggles for the compass ring, cardinal ticks, current rays, current markers, listener dot, history trail, and F/B/L/R labels
 - Automatic display targeting for a detected Steam game window
 - Manual display selection and a display-cycling hotkey
 - Global hotkeys for toggling the overlay and opening settings
-- A dedicated three-color application, tray, and shortcut icon
+- A dedicated three-color application, tray, shortcut, and README icon based on the overlay's paired direction markers
 - Persistent settings in `%AppData%\SoundDirectionVisualizer\settings.json`
 - A UI-independent analysis library with automated tests
 
@@ -105,10 +105,16 @@ dotnet test .\SoundDirectionVisualizer.sln --configuration Release --no-build
 
 Publishing creates a self-contained single-file executable under `artifacts\publish\win-x64`.
 
+The tracked PNG and multi-resolution Windows icon share one deterministic source. Regenerate both after changing the icon geometry or palette:
+
+```powershell
+.\scripts\generate-icon-assets.ps1
+```
+
 To build the same named executable and checksum used by GitHub Releases:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.0.1
+.\scripts\build-release.ps1 -Version 1.0.2
 ```
 
 Maintainers should follow [docs/RELEASING.md](docs/RELEASING.md). The tagged release workflow validates the semantic version, formatting, build, tests, executable, and SHA-256 checksum before creating or updating a GitHub Release.
