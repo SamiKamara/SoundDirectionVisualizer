@@ -4,6 +4,15 @@ obj/
 artifacts/
 TestResults/
 
+## Generated binaries and distributable archives
+*.exe
+*.dll
+*.pdb
+*.msi
+*.zip
+*.7z
+*.dmp
+
 ## IDE and user-local files
 .vs/
 .vscode/

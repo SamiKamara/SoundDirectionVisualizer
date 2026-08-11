@@ -51,6 +51,18 @@ dotnet test .\SoundDirectionVisualizer.sln --configuration Release --no-build
 
 GitHub Actions runs these commands on `windows-latest` for pushes and pull requests.
 
+## Release-package verification
+
+Build the exact local release assets with:
+
+```powershell
+.\scripts\build-release.ps1 -Version 1.0.0
+```
+
+The script verifies formatting, performs the Release build and full tests, publishes the self-contained Windows x64 executable without debug symbols, packages the application license and version-specific third-party notices, creates `SHA256SUMS.txt`, and verifies every checksum. Generated assets remain under `artifacts\release\v1.0.0` and must not be committed.
+
+The tagged GitHub Actions workflow runs the same script before uploading only the named executable, license, third-party notices, and checksum manifest to a release.
+
 ## Manual Windows smoke test
 
 Before a user-facing release:

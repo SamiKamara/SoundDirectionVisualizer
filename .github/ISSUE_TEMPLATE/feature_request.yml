@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest a focused improvement to the application or its documentation.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: User need
+      description: What accessibility or workflow problem should this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the result without assuming unsupported directional precision.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: model
+    attributes:
+      label: Direction-model check
+      options:
+        - label: This request does not hide stereo front/back ambiguity or silently down-select multichannel audio.
+          required: true

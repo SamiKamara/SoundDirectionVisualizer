@@ -1,10 +1,19 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$OutputPath
+)
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repositoryRoot "src\SoundDirectionVisualizer.App\SoundDirectionVisualizer.App.csproj"
-$outputPath = Join-Path $repositoryRoot "artifacts\publish\win-x64"
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    $OutputPath = Join-Path $repositoryRoot "artifacts\publish\win-x64"
+}
+
+$OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
 
 dotnet publish $projectPath `
     --configuration Release `
@@ -12,6 +21,17 @@ dotnet publish $projectPath `
     --self-contained true `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
-    --output $outputPath
+    -p:DebugType=None `
+    -p:DebugSymbols=false `
+    --output $OutputPath
 
-Write-Host "Published SoundDirectionVisualizer.exe to $outputPath"
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed with exit code $LASTEXITCODE."
+}
+
+$publishedExecutable = Join-Path $OutputPath "SoundDirectionVisualizer.exe"
+if (-not (Test-Path -LiteralPath $publishedExecutable -PathType Leaf)) {
+    throw "Publishing did not produce '$publishedExecutable'."
+}
+
+Write-Host "Published SoundDirectionVisualizer.exe to $OutputPath"

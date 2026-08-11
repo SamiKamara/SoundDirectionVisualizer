@@ -1,0 +1,92 @@
+name: Build release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing semantic version tag to build, for example v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Validate tag and project version
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v(?<version>\d+\.\d+\.\d+)$') {
+              throw "Release tag must use vMAJOR.MINOR.PATCH, received '$env:RELEASE_TAG'."
+          }
+
+          $tagVersion = $Matches.version
+          [xml]$project = Get-Content '.\src\SoundDirectionVisualizer.App\SoundDirectionVisualizer.App.csproj'
+          $projectVersion = $project.SelectSingleNode('//Version').InnerText
+          if ($projectVersion -ne $tagVersion) {
+              throw "Tag version '$tagVersion' does not match project version '$projectVersion'."
+          }
+
+          "RELEASE_VERSION=$tagVersion" >> $env:GITHUB_ENV
+
+      - name: Build and verify release assets
+        shell: pwsh
+        run: .\scripts\build-release.ps1 -Version $env:RELEASE_VERSION
+
+      - name: Create or update GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $repository = $env:GITHUB_REPOSITORY
+          $assetDirectory = ".\artifacts\release\$env:RELEASE_TAG"
+          $executable = Join-Path $assetDirectory 'SoundDirectionVisualizer-win-x64.exe'
+          $license = Join-Path $assetDirectory 'LICENSE.txt'
+          $thirdPartyNotices = Join-Path $assetDirectory 'THIRD-PARTY-NOTICES.txt'
+          $checksums = Join-Path $assetDirectory 'SHA256SUMS.txt'
+
+          gh release view $env:RELEASE_TAG --repo $repository *> $null
+          if ($LASTEXITCODE -eq 0) {
+              gh release upload $env:RELEASE_TAG `
+                  $executable `
+                  $license `
+                  $thirdPartyNotices `
+                  $checksums `
+                  --clobber `
+                  --repo $repository
+          }
+          else {
+              gh release create $env:RELEASE_TAG `
+                  $executable `
+                  $license `
+                  $thirdPartyNotices `
+                  $checksums `
+                  --generate-notes `
+                  --latest `
+                  --repo $repository `
+                  --title "Sound Direction Visualizer $env:RELEASE_TAG" `
+                  --verify-tag
+          }

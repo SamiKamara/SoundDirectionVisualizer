@@ -15,4 +15,5 @@
   - stop only the verified instances whose files must be replaced, preserve settings, and relaunch after the update only the executable locations that were running before it; prefer the matching desktop shortcut when one exists;
   - verify the final target timestamps or hashes and the relaunched executable paths before reporting success. If a target remains locked, wait and retry rather than claiming that it was updated.
 - Intermediate compiler checks may leave the running app alone, but the final validated build must complete the synchronization and restart procedure above.
+- For releases, read `docs/RELEASING.md` and use `scripts\create-release.ps1`. Release tags must be annotated `vMAJOR.MINOR.PATCH` tags whose numeric version matches the app project and `CHANGELOG.md`. Never change repository visibility as part of release preparation unless the user separately asks for it.
 - Do not commit generated output under `bin`, `obj`, `artifacts`, or `TestResults`.

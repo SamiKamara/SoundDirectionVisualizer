@@ -13,6 +13,8 @@ Implemented in the initial project:
 - click-through in-game compass with history
 - Steam game display detection plus manual display selection
 - persistent settings, tray controls, global hotkeys, tests, and Windows CI
+- dark-mode settings and tray UI
+- reproducible tagged GitHub Releases with a self-contained executable and checksum
 
 Near-term hardening:
 
@@ -22,7 +24,7 @@ Near-term hardening:
 - add an optional calibration view and synthetic pan test;
 - profile overlay painting during sustained high-frequency capture;
 - investigate non-Steam target rules without weakening predictable screen selection;
-- add packaged releases and signed binaries when distribution begins;
+- add Authenticode signing when a suitable certificate and protected signing workflow are available;
 - move from the pinned NAudio 3 preview to a stable release after process-loopback behavior is verified unchanged.
 
 ## Phase 2: native multichannel output

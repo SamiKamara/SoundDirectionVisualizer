@@ -1,8 +1,18 @@
 # Sound Direction Visualizer
 
+<p align="center">
+  <img src="src/SoundDirectionVisualizer.App/Assets/SoundDirectionVisualizerIcon.png" alt="Sound Direction Visualizer icon" width="96" height="96">
+</p>
+
 Sound Direction Visualizer is a Windows accessibility overlay that estimates a sound's left/right direction from the audio currently being played and draws the result over a game. It runs as a notification-area application and does not take mouse or keyboard focus from the game.
 
 The first version deliberately supports **stereo output only**. Stereo provides left/right balance but normally cannot distinguish whether the sound is in front of or behind the listener, so the overlay shows both mathematically valid directions. This limitation is visible instead of being hidden behind a false sense of precision.
+
+## Download
+
+Download the ready-to-run application from the [latest GitHub Release](https://github.com/SamiKamara/SoundDirectionVisualizer/releases/latest), or use the [direct Windows x64 download](https://github.com/SamiKamara/SoundDirectionVisualizer/releases/latest/download/SoundDirectionVisualizer-win-x64.exe).
+
+The release is a self-contained, single-file executable. It does not require a separate .NET installation. Download `SHA256SUMS.txt` from the same release to verify the executable before running it; the release also includes the application license and bundled third-party notices. The executable is not currently code-signed, so Windows SmartScreen may show an unknown-publisher warning.
 
 ## Current features
 
@@ -24,7 +34,8 @@ The first version deliberately supports **stereo output only**. Stereo provides 
 ## Requirements
 
 - Windows 10 or newer
-- .NET 9 SDK when running from source
+- 64-bit Windows for the published executable
+- .NET 9 SDK only when running from source
 - A stereo Windows output endpoint for version 1
 
 Optional direct game-process capture requires Windows 10 version 2004 (build 19041) or newer. On older Windows versions, or if direct activation fails, the application automatically uses the selected stereo output endpoint instead.
@@ -85,12 +96,22 @@ The overlay works best with borderless-windowed games. Exclusive fullscreen, pro
 ## Build, test, and publish
 
 ```powershell
-dotnet build .\SoundDirectionVisualizer.sln --configuration Release
-dotnet test .\SoundDirectionVisualizer.sln --configuration Release
+dotnet restore .\SoundDirectionVisualizer.sln
+dotnet format .\SoundDirectionVisualizer.sln --verify-no-changes --no-restore
+dotnet build .\SoundDirectionVisualizer.sln --configuration Release --no-restore
+dotnet test .\SoundDirectionVisualizer.sln --configuration Release --no-build
 .\scripts\publish-win-x64.ps1
 ```
 
 Publishing creates a self-contained single-file executable under `artifacts\publish\win-x64`.
+
+To build the same named executable and checksum used by GitHub Releases:
+
+```powershell
+.\scripts\build-release.ps1 -Version 1.0.0
+```
+
+Maintainers should follow [docs/RELEASING.md](docs/RELEASING.md). The tagged release workflow validates the semantic version, formatting, build, tests, executable, and SHA-256 checksum before creating or updating a GitHub Release.
 
 For a live verification of the same production capture service used by the overlay:
 
@@ -101,12 +122,19 @@ dotnet run --project .\tools\SoundDirectionVisualizer.ProcessAudioProbe\SoundDir
 
 The first command reports the detected Steam window process and the active audio process selected from the same game installation. The second captures that process and reports the active source, observed L/R balance, and exact hard-side frame counts for all active audio and its loudest decile without writing captured audio to disk.
 
+## Privacy and security
+
+Sound Direction Visualizer analyzes loopback audio locally in memory. It does not record audio to disk, transmit audio, include telemetry, or require an account. Settings remain in `%AppData%\SoundDirectionVisualizer\settings.json`. The optional diagnostic probe reports aggregate levels and candidate counts only.
+
+Report security vulnerabilities privately according to [SECURITY.md](SECURITY.md). Do not attach captured audio, personal filesystem paths, or sensitive game logs to public issues.
+
 ## Architecture and project policy
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes components and runtime flow.
 - [docs/AUDIO-MODEL.md](docs/AUDIO-MODEL.md) defines the stereo math and its limitations.
 - [docs/ROADMAP.md](docs/ROADMAP.md) records planned multichannel and virtual-device research.
 - [docs/TESTING.md](docs/TESTING.md) defines automated and manual verification.
+- [docs/RELEASING.md](docs/RELEASING.md) defines the tagged GitHub Release process.
 - [CONTRIBUTING.md](CONTRIBUTING.md) explains the change discipline.
 
 The analysis code must remain independent from WinForms and NAudio so that it can be tested with deterministic sample buffers. Behavioral changes require tests, and user-visible or architectural changes require documentation updates.
@@ -117,3 +145,7 @@ The analysis code must remain independent from WinForms and NAudio so that it ca
 - [Aimoro](https://github.com/SamiKamara/Aimoro) provided the proven WinForms overlay, tray-app, global-hotkey, Steam-window targeting, display-selection, and persisted-settings patterns (reviewed at commit `0f1164374f12f053cad6a02a9af8460d0efbe93d`).
 
 This repository evolves those ideas into a separate sound-direction overlay with a testable core and an explicit path toward multichannel input.
+
+## License
+
+Sound Direction Visualizer is available under the [MIT License](LICENSE).

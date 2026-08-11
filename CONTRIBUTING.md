@@ -32,6 +32,10 @@ When a task produces a new runnable build on a development machine, the final va
 
 Generated publish output remains local and must not be committed.
 
+## Releases
+
+Release tags, assets, checksums, and recovery procedures are documented in [docs/RELEASING.md](docs/RELEASING.md). Use `scripts\create-release.ps1` rather than assembling or uploading release assets by hand.
+
 ## Commit scope
 
 Keep audio math, platform integration, UI, and documentation changes separable when practical. Generated `bin`, `obj`, `artifacts`, and `TestResults` output must not be committed.
